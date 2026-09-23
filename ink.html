@@ -168,8 +168,8 @@ canvas{display:block;width:100%;max-width:700px;height:auto;background:transpare
     <div class="section-body" id="sec-lights">
       <div class="row"><label>samples</label>
         <select id="sampleRes">
-          <option value="1">1 x 1 (point)</option>
-          <option value="2" selected>2 x 2</option>
+          <option value="2">2 x 2</option>
+          <option value="1" selected>1 x 1 (fastest)</option>
           <option value="3">3 x 3</option>
           <option value="4">4 x 4</option>
         </select>
@@ -352,7 +352,7 @@ const SHADOW_FULL=88,SHADOW_REACH=280;   /* shadow distance (voxels from centre)
 const SHADOW_STAMP=.12,SHADOW_BLUR_MIN=24,SHADOW_BLUR_MAX=256;   /* per-voxel stamp alpha, blur reach range (canvas px) */
 const BLEED_MAX=.5,BLEED_BLUR=120,BLEED_REACH=160;   /* layer opacity at full bleed, blur reach (canvas px), fade distance (voxels) */
 const FAR=1000;          /* distance used to fake a sun (directional light) as a very far point */
-const MAX_LIGHTS=8;
+const MAX_LIGHTS=4;
 
 const project=(x,y,z,rotX,rotY,rotZ)=>{
   let px=x-CEN,py=y-CEN,pz=z-CEN;
@@ -549,21 +549,22 @@ const prepDots=dots=>{
   const key=(x,y,z)=>((x+2)*260+(y+2))*260+(z+2);
   const occ=new Set();
   for(const d of dots) occ.add(key(d.x,d.y,d.z));
+  const out=[];
   for(const d of dots){
-    d.surf=!(occ.has(key(d.x+1,d.y,d.z))&&occ.has(key(d.x-1,d.y,d.z))&&
-             occ.has(key(d.x,d.y+1,d.z))&&occ.has(key(d.x,d.y-1,d.z))&&
-             occ.has(key(d.x,d.y,d.z+1))&&occ.has(key(d.x,d.y,d.z-1)));
-    /* color bleed: carry the voxel's hue (not its brightness) into the shadow.
-       bw = how colorful the voxel is, so white/gray/black voxels add no tint;
-       bs* = the hue at a fixed vivid brightness */
+    // === SPEED: Skip interior voxels — never visible, ~100× fewer to render ===
+    const isSurf=!(occ.has(key(d.x+1,d.y,d.z))&&occ.has(key(d.x-1,d.y,d.z))&&
+                  occ.has(key(d.x,d.y+1,d.z))&&occ.has(key(d.x,d.y-1,d.z))&&
+                  occ.has(key(d.x,d.y,d.z+1))&&occ.has(key(d.x,d.y,d.z-1)));
+    if(!isSurf) continue;
+    d.surf=true;
     const c=hexToRgb(d.color),lum=.299*c.r+.587*c.g+.114*c.b;
-    d.c=c;   /* cached rgb so the shaders don't re-parse hex for every light */
-    d.lum=lum;
+    d.c=c;d.lum=lum;
     const chroma=Math.hypot(c.r-lum,c.g-lum,c.b-lum),mx=Math.max(c.r,c.g,c.b)||1;
     d.bw=clamp(chroma/90,0,1);
     d.bsr=c.r*195/mx|0;d.bsg=c.g*195/mx|0;d.bsb=c.b*195/mx|0;
+    out.push(d);
   }
-  return dots;
+  return out;
 };
 
 const rebuildShape=()=>{
@@ -700,6 +701,7 @@ const prepareLights=()=>{
       A.sky=lcol;A.ground=hexToRgb(l.ground);
       out.push(A);continue;
     }
+    if(l.intensity<.01) continue;  // SPEED: skip negligible lights
     nd++;
     A.fillCol=`rgba(${clamp(10+(lcol.r-128)*.05,0,40)},${clamp(10+(lcol.g-128)*.05,0,40)},${clamp(20+(lcol.b-128)*.05,0,50)},`;
     const casts=l.shadow!==false;
@@ -892,7 +894,7 @@ const state={
   meshDots:null,
   meshRadius:20,
   rotX:192,rotY:85,rotZ:360,
-  sampleRes:2,
+  sampleRes:1,
   voxelOpacity:1.0,
   phongPower:160,phongInten:1.6,phongOpacity:1,
   bulletOpacity:0,roughness:.25,
