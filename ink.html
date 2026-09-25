@@ -94,8 +94,19 @@ canvas{display:block;width:100%;max-width:700px;height:auto;background:transpare
           <option value="torus">torus</option>
           <option value="cone">cone</option>
           <option value="mesh" id="meshShapeOption" disabled>imported mesh</option>
+          <option value="text" id="textShapeOption" disabled>letter</option>
         </select>
       </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-camera">camera <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-camera" style="display:none">
+      <div class="row"><label>rot X</label><input type="range" id="camRotX" min="0" max="360" step="1" value="192"><span class="val" id="camRotXVal">192</span></div>
+      <div class="row"><label>rot Y</label><input type="range" id="camRotY" min="0" max="360" step="1" value="85"><span class="val" id="camRotYVal">85</span></div>
+      <div class="row"><label>rot Z</label><input type="range" id="camRotZ" min="0" max="360" step="1" value="0"><span class="val" id="camRotZVal">0</span></div>
+      <div class="note">rotates the whole scene — typing a letter automatically faces the camera at its front; drag these to look from anywhere</div>
     </div>
   </div>
 
@@ -110,6 +121,19 @@ canvas{display:block;width:100%;max-width:700px;height:auto;background:transpare
       <div class="row"><label>z is up</label><input type="checkbox" id="meshZUp"></div>
       <div class="note">voxelizes the mesh to fit the grid in a single flat color (the palette color below) — texture and gradient are ignored for imported meshes. closed / watertight solids voxelize best. "z is up" rotates models exported with z as the vertical axis (common for stl). large meshes can take a few seconds; this is a simple grid voxelizer, not a precision converter</div>
       <div class="note" id="meshMsg"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-text">letter <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-text" style="display:none">
+      <div class="row">
+        <label>letter</label>
+        <input type="text" id="textChar" maxlength="1" style="flex:1;min-width:0;font-family:monospace,sans-serif;font-size:14px;font-weight:700;text-align:center" placeholder="A">
+      </div>
+      <div class="row"><label>depth</label><input type="range" id="textDepth" min="8" max="60" step="2" value="32"><span class="val" id="textDepthVal">32</span></div>
+      <div class="note">renders one typed letter as a solid extruded shape, in the palette color below — texture and gradient are ignored, same as an imported mesh</div>
+      <div class="note" id="textMsg"></div>
     </div>
   </div>
 
@@ -311,7 +335,7 @@ canvas{display:block;width:100%;max-width:700px;height:auto;background:transpare
 
 <script>
 (function(){
-const GRID=256,LAYERS=256,DOT_RADIUS=0.65,SPACING=0.9;
+const GRID=256,LAYERS=256,DOT_RADIUS=1.0,SPACING=0.9;
 const CANVAS_SIZE=700,GROUND_Y=100,CEN=GRID/2,MAX_DEPTH=GRID;
 const FOG_COLOR={r:30,g:30,b:35};
 const MS_PAINT_COLORS=[
@@ -348,9 +372,9 @@ const hexToRgb=h=>{
 const normalize=v=>{const l=Math.hypot(v.x,v.y,v.z)||1;return{x:v.x/l,y:v.y/l,z:v.z/l}};
 const dot=(a,b)=>a.x*b.x+a.y*b.y+a.z*b.z;
 const TAU=Math.PI*2;
-const SHADOW_FULL=88,SHADOW_REACH=280;   /* shadow distance (voxels from centre): full strength until, gone by */
-const SHADOW_STAMP=.12,SHADOW_BLUR_MIN=24,SHADOW_BLUR_MAX=256;   /* per-voxel stamp alpha, blur reach range (canvas px) */
-const BLEED_MAX=.5,BLEED_BLUR=120,BLEED_REACH=160;   /* layer opacity at full bleed, blur reach (canvas px), fade distance (voxels) */
+const SHADOW_FULL=110,SHADOW_REACH=260;   /* shadow distance (voxels from centre): full strength until, gone by */
+const SHADOW_STAMP=.26,SHADOW_BLUR_MIN=18,SHADOW_BLUR_MAX=200;   /* per-voxel stamp alpha, blur reach range (canvas px) */
+const BLEED_MAX=.8,BLEED_BLUR=100,BLEED_REACH=160;   /* layer opacity at full bleed, blur reach (canvas px), fade distance (voxels) */
 const FAR=1000;          /* distance used to fake a sun (directional light) as a very far point */
 const MAX_LIGHTS=4;
 
@@ -578,6 +602,19 @@ const rebuildShape=()=>{
     const col=state.color;
     state.dots=prepDots(state.meshDots.map(d=>({x:d.x,y:d.y,z:d.z,nx:d.nx,ny:d.ny,nz:d.nz,color:col})));
     state.shapeRadius=state.meshRadius||20;
+    return;
+  }
+  if(state.shape==='text'){
+    /* extruded letter voxels: same single flat-color treatment as an imported mesh —
+       texture and gradient are ignored since there is no UV mapping for arbitrary glyphs */
+    if(!state.textDots||!state.textDots.length){
+      state.dots=[];
+      state.shapeRadius=SHAPES.sphere.radius;
+      return;
+    }
+    const col=state.color;
+    state.dots=prepDots(state.textDots.map(d=>({x:d.x,y:d.y,z:d.z,nx:d.nx,ny:d.ny,nz:d.nz,color:col})));
+    state.shapeRadius=state.textRadius||74;
     return;
   }
   const def=SHAPES[state.shape];
@@ -893,7 +930,11 @@ const state={
   textureKind:null,
   meshDots:null,
   meshRadius:20,
-  rotX:192,rotY:85,rotZ:360,
+  textChar:'',
+  textDots:null,
+  textRadius:74,
+  textDepth:32,
+  rotX:192,rotY:85,rotZ:0,
   sampleRes:1,
   voxelOpacity:1.0,
   phongPower:160,phongInten:1.6,phongOpacity:1,
@@ -1086,6 +1127,15 @@ shapeSelect.addEventListener('change',()=>{
   rebuildShape();
 });
 
+/* camera rotation sliders — rotate the whole scene; read fresh every frame, no rebuild needed */
+const setCameraRot=(x,y,z)=>{
+  state.rotX=x;state.rotY=y;state.rotZ=z;
+  const ex=document.getElementById('camRotX'),ey=document.getElementById('camRotY'),ez=document.getElementById('camRotZ');
+  const vx=document.getElementById('camRotXVal'),vy=document.getElementById('camRotYVal'),vz=document.getElementById('camRotZVal');
+  if(ex){ex.value=x;vx.textContent=x;}
+  if(ey){ey.value=y;vy.textContent=y;}
+  if(ez){ez.value=z;vz.textContent=z;}
+};
 /* --- texture upload (read as a data URL so it also works when hosted) --- */
 const texInput=document.getElementById('texInput');
 const texInfo=document.getElementById('texInfo');
@@ -1449,6 +1499,85 @@ document.getElementById('meshClear').addEventListener('click',()=>{
   }
 });
 
+/* ==================== TEXT / LETTER (RASTERIZE -> EXTRUDE -> VOXELS) ====================
+   Draws the typed character onto a GRID x GRID canvas with a bold sans-serif font, thresholds
+   the alpha channel into a flat 2D mask, then extrudes that mask along z into a solid occupancy
+   grid — the same shape occToMeshDots() (built for mesh import, above) already knows how to turn
+   into voxels with approximate surface normals. Single flat color only, like an imported mesh. */
+const textChar=document.getElementById('textChar');
+const textDepthEl=document.getElementById('textDepth');
+const textDepthVal=document.getElementById('textDepthVal');
+const textMsg=document.getElementById('textMsg');
+const textShapeOption=document.getElementById('textShapeOption');
+
+const buildTextShape=()=>{
+  const ch=(state.textChar||'').trim();
+  if(!ch){
+    state.textDots=null;
+    textShapeOption.disabled=true;
+    textMsg.textContent='';
+    if(state.shape==='text') rebuildShape();
+    return;
+  }
+  const N=GRID;
+  const off=document.createElement('canvas');off.width=off.height=N;
+  const octx=off.getContext('2d');
+  octx.clearRect(0,0,N,N);
+  octx.fillStyle='#fff';
+  const fontSize=Math.round(N*0.72);
+  octx.font='bold '+fontSize+'px sans-serif';
+  octx.textAlign='center';octx.textBaseline='middle';
+  octx.fillText(ch,N/2,N/2);
+  const img=octx.getImageData(0,0,N,N).data;
+  const mask=new Uint8Array(N*N);
+  let any=false;
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    if(img[(y*N+x)*4+3]>128){mask[y*N+x]=1;any=true;}
+  }
+  if(!any){
+    state.textDots=null;
+    textShapeOption.disabled=true;
+    textMsg.textContent="couldn't render that character";
+    if(state.shape==='text') rebuildShape();
+    return;
+  }
+  const depth=state.textDepth,half=Math.round(depth/2);
+  const z0=Math.max(0,CEN-half),z1=Math.min(N-1,CEN+half);
+  const occ=new Uint8Array(N*N*N);
+  const idx=(x,y,z)=>(x*N+y)*N+z;
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    if(!mask[y*N+x]) continue;
+    for(let z=z0;z<=z1;z++) occ[idx(x,y,z)]=1;
+  }
+  const dots=occToMeshDots(occ);
+  if(!dots.length){
+    state.textDots=null;
+    textShapeOption.disabled=true;
+    textMsg.textContent="couldn't render that character";
+    if(state.shape==='text') rebuildShape();
+    return;
+  }
+  state.textDots=dots;
+  state.textRadius=N*0.36+half;
+  textShapeOption.disabled=false;
+  textMsg.textContent=dots.length+' voxels';
+  const enteringText=state.shape!=='text';
+  state.shape='text';
+  shapeSelect.value='text';
+  if(enteringText) setCameraRot(0,0,0);
+  rebuildShape();
+};
+
+textChar.addEventListener('input',()=>{
+  state.textChar=textChar.value.slice(0,1);
+  buildTextShape();
+});
+textDepthEl.addEventListener('input',()=>{
+  state.textDepth=+textDepthEl.value;
+  textDepthVal.textContent=textDepthEl.value;
+  if(state.textChar) buildTextShape();
+});
+
 document.getElementById('sampleRes').addEventListener('change',e=>{
   state.sampleRes=+e.target.value;
 });
@@ -1457,6 +1586,9 @@ const bind=(id,vid,prop,fmt)=>{
   const el=document.getElementById(id),vel=document.getElementById(vid);
   el.addEventListener('input',()=>{const v=+el.value;state[prop]=v;vel.textContent=fmt?fmt(v):v});
 };
+bind('camRotX','camRotXVal','rotX');
+bind('camRotY','camRotYVal','rotY');
+bind('camRotZ','camRotZVal','rotZ');
 bind('voxelOpacity','voxelOpacityVal','voxelOpacity',v=>v.toFixed(2));
 bind('phongPower','phongPowerVal','phongPower');
 bind('phongInten','phongIntenVal','phongInten',v=>v.toFixed(2));
@@ -2295,7 +2427,7 @@ const gpuRender=()=>{
     setAttrs(gpu.shell,7,[[0,3,0],[1,4,3]]);
     gl.uniformMatrix3fv(S.u('uRot'),false,rotM);
     gl.uniform1f(S.u('uKind'),kind);
-    gl.uniform1f(S.u('uSr0'),DOT_RADIUS*1.3*256/BS);
+    gl.uniform1f(S.u('uSr0'),DOT_RADIUS*1.9*256/BS);
     gl.uniform1f(S.u('uBr'),DOT_RADIUS*4*256/BS);
     fn(S);
   };
@@ -2341,7 +2473,7 @@ const gpuRender=()=>{
       }
     });
     const blurPx=SHADOW_BLUR_MIN+state.shadowBlur*(SHADOW_BLUR_MAX-SHADOW_BLUR_MIN);
-    const t=pyrCompose(pyramidWeights(shadowPyr,blurPx,2.2));
+    const t=pyrCompose(pyramidWeights(shadowPyr,blurPx,2.8));
     compositeLayer(t,clamp(state.shadowOpacity,0,1),pool?{peak:clamp(glowL*1.8,0,1),x:pool.x,y:pool.y,r:pool.R*1.15}:null);
   }
 
@@ -2354,7 +2486,7 @@ const gpuRender=()=>{
         gl.drawArrays(gl.POINTS,0,gpu.shellN);
       }
     });
-    const t=pyrCompose(pyramidWeights(bleedPyr,BLEED_BLUR,2.2));
+    const t=pyrCompose(pyramidWeights(bleedPyr,BLEED_BLUR,2.6));
     compositeLayer(t,clamp(state.colorBleed*BLEED_MAX,0,1),null);
   }
 
@@ -2518,7 +2650,7 @@ const renderCPU=()=>{
      away and the penumbra is smooth. Caustics stay on the main canvas.
      Works for every shadow-casting light: area/point (positional) and sun (parallel rays). */
   const causticOn=state.causticOpacity>.01,shadowOn=state.shadowOpacity>.001;
-  const sx0=shadowPyr.ctx,ss=shadowPyr.scale,sr0=DOT_RADIUS*1.3*ss;
+  const sx0=shadowPyr.ctx,ss=shadowPyr.scale,sr0=DOT_RADIUS*1.9*ss;
   if(shadowOn) shadowPyr.clear();
   let shadowAny=false;
   for(const d of list){
@@ -2600,7 +2732,7 @@ const renderCPU=()=>{
 
   if(shadowOn&&shadowAny){
     const blurPx=SHADOW_BLUR_MIN+state.shadowBlur*(SHADOW_BLUR_MAX-SHADOW_BLUR_MIN);
-    const pool=shadowPyr.compose(pyramidWeights(shadowPyr,blurPx,2.2));
+    const pool=shadowPyr.compose(pyramidWeights(shadowPyr,blurPx,2.8));
     if(glowPool){
       /* light fills the shadow: knock the darkness out wherever the glow reaches */
       const sx=shadowPyr.up[0].x;
@@ -2643,7 +2775,7 @@ const renderCPU=()=>{
       }
     }
     if(any){
-      const pool=bleedPyr.compose(pyramidWeights(bleedPyr,BLEED_BLUR,2.2));
+      const pool=bleedPyr.compose(pyramidWeights(bleedPyr,BLEED_BLUR,2.6));
       ctx.save();
       ctx.globalAlpha=clamp(state.colorBleed*BLEED_MAX,0,1);
       ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
