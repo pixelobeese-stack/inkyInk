@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>inkyMaker</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&family=Quicksand:wght@400;500;600;700&display=swap');
 :root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -130,6 +131,17 @@ canvas{display:block;width:100%;max-width:700px;height:auto;background:transpare
       <div class="row">
         <label>letter</label>
         <input type="text" id="textChar" maxlength="1" style="flex:1;min-width:0;font-family:monospace,sans-serif;font-size:14px;font-weight:700;text-align:center" placeholder="A">
+      </div>
+      <div class="row">
+        <label>font</label>
+        <select id="textFont">
+          <option value="rounded">rounded</option>
+          <option value="fredoka">fredoka</option>
+          <option value="nunito">nunito</option>
+          <option value="quicksand">quicksand</option>
+          <option value="soft">soft sans</option>
+          <option value="mono">monospace</option>
+        </select>
       </div>
       <div class="row"><label>depth</label><input type="range" id="textDepth" min="8" max="60" step="2" value="32"><span class="val" id="textDepthVal">32</span></div>
       <div class="note">renders one typed letter as a solid extruded shape, in the palette color below — texture and gradient are ignored, same as an imported mesh</div>
@@ -275,7 +287,8 @@ canvas{display:block;width:100%;max-width:700px;height:auto;background:transpare
     <div class="title collapsed" data-target="sec-caustic">caustic <span class="arrow">&#9662;</span></div>
     <div class="section-body" id="sec-caustic" style="display:none">
       <div class="row"><label>enabled</label><input type="checkbox" id="causticEnabled" checked></div>
-      <div class="note">light pattern on the ground — fixed 0.05 opacity</div>
+      <div class="row"><label>sharpness</label><input type="range" id="causticSharpness" min="0" max="1" step="0.05" value="0.50"><span class="val" id="causticSharpnessVal">0.50</span></div>
+      <div class="note">sharper = tighter, cleaner caustic pattern; this layer is kept outside the final post filter</div>
     </div>
   </div>
 
@@ -284,7 +297,8 @@ canvas{display:block;width:100%;max-width:700px;height:auto;background:transpare
     <div class="section-body" id="sec-shadow" style="display:none">
       <div class="row"><label>opacity</label><input type="range" id="shadowOpacity" min="0" max="1" step="0.05" value="0.3"><span class="val" id="shadowOpacityVal">0.30</span></div>
       <div class="row"><label>blur</label><input type="range" id="shadowBlur" min="0" max="1" step="0.05" value="0.5"><span class="val" id="shadowBlurVal">0.50</span></div>
-      <div class="note">soft cast shadow — lower opacity = lighter, higher blur = softer edge</div>
+      <div class="row"><label>sharpness</label><input type="range" id="shadowSharpness" min="0" max="1" step="0.05" value="0.50"><span class="val" id="shadowSharpnessVal">0.50</span></div>
+      <div class="note">sharpness tightens the shadow edge independently; this layer is kept outside the final post filter</div>
     </div>
   </div>
 
@@ -292,7 +306,8 @@ canvas{display:block;width:100%;max-width:700px;height:auto;background:transpare
     <div class="title collapsed" data-target="sec-bleed">color bleed <span class="arrow">&#9662;</span></div>
     <div class="section-body" id="sec-bleed" style="display:none">
       <div class="row"><label>amount</label><input type="range" id="colorBleed" min="0" max="1" step="0.05" value="0.4"><span class="val" id="colorBleedVal">0.40</span></div>
-      <div class="note">voxel color tints the shadow — textures bleed per voxel</div>
+      <div class="row"><label>sharpness</label><input type="range" id="bleedSharpness" min="0" max="1" step="0.05" value="0.50"><span class="val" id="bleedSharpnessVal">0.50</span></div>
+      <div class="note">sharpness tightens the colour pool independently; this layer is kept outside the final post filter</div>
     </div>
   </div>
 
@@ -970,7 +985,8 @@ const state={
   reflOpacity:0,reflSky:.75,reflHorizon:.05,reflShadow:1,
   glowOpacity:0,glowStrength:1.2,haloSize:96,glowMatch:true,glowColor:'#ffb347',
   causticOpacity:.05,
-  fogAmount:.35,shadowOpacity:.3,shadowBlur:.5,colorBleed:.4,
+  fogAmount:.35,shadowOpacity:.3,shadowBlur:.5,shadowSharpness:.5,colorBleed:.4,bleedSharpness:.5,
+  causticSharpness:.5,
   postBrightness:1.0,postContrast:1.0,
   frontOpacity:1,backOpacity:1,split:0,lensBend:0,lensDisp:0,
   spreadOn:false,spreadX:8,spreadY:8,spreadPasses:1,spreadSeed:1,
@@ -1569,6 +1585,7 @@ document.getElementById('meshClear').addEventListener('click',()=>{
    grid — the same shape occToMeshDots() (built for mesh import, above) already knows how to turn
    into voxels with approximate surface normals. Single flat color only, like an imported mesh. */
 const textChar=document.getElementById('textChar');
+const textFont=document.getElementById('textFont');
 const textDepthEl=document.getElementById('textDepth');
 const textDepthVal=document.getElementById('textDepthVal');
 const textMsg=document.getElementById('textMsg');
@@ -1589,7 +1606,15 @@ const buildTextShape=()=>{
   octx.clearRect(0,0,N,N);
   octx.fillStyle='#fff';
   const fontSize=Math.round(N*0.72);
-  octx.font='bold '+fontSize+'px sans-serif';
+  const fontMap={
+    rounded:'700 '+fontSize+'px "Arial Rounded MT Bold", "Nunito", sans-serif',
+    fredoka:'600 '+fontSize+'px "Fredoka", sans-serif',
+    nunito:'800 '+fontSize+'px "Nunito", sans-serif',
+    quicksand:'700 '+fontSize+'px "Quicksand", sans-serif',
+    soft:'700 '+fontSize+'px "Trebuchet MS", "Nunito", sans-serif',
+    mono:'700 '+fontSize+'px monospace'
+  };
+  octx.font=fontMap[state.textFont||'rounded'];
   octx.textAlign='center';octx.textBaseline='middle';
   octx.fillText(ch,N/2,N/2);
   const img=octx.getImageData(0,0,N,N).data;
@@ -1636,6 +1661,10 @@ textChar.addEventListener('input',()=>{
   state.textChar=textChar.value.slice(0,1);
   buildTextShape();
 });
+textFont.addEventListener('change',()=>{
+  state.textFont=textFont.value;
+  if(state.textChar) buildTextShape();
+});
 textDepthEl.addEventListener('input',()=>{
   state.textDepth=+textDepthEl.value;
   textDepthVal.textContent=textDepthEl.value;
@@ -1672,7 +1701,10 @@ document.getElementById('glowMatch').addEventListener('change',e=>{state.glowMat
 document.getElementById('glowColor').addEventListener('input',e=>{state.glowColor=e.target.value;state.glowMatch=false;document.getElementById('glowMatch').checked=false});
 bind('shadowOpacity','shadowOpacityVal','shadowOpacity',v=>v.toFixed(2));
 bind('shadowBlur','shadowBlurVal','shadowBlur',v=>v.toFixed(2));
+bind('shadowSharpness','shadowSharpnessVal','shadowSharpness',v=>v.toFixed(2));
 bind('colorBleed','colorBleedVal','colorBleed',v=>v.toFixed(2));
+bind('bleedSharpness','bleedSharpnessVal','bleedSharpness',v=>v.toFixed(2));
+bind('causticSharpness','causticSharpnessVal','causticSharpness',v=>v.toFixed(2));
 bind('fogAmount','fogAmountVal','fogAmount',v=>v.toFixed(2));
 document.getElementById('causticEnabled').addEventListener('change',e=>{state.causticOpacity=e.target.checked?.05:0});
 bind('postBrightness','postBrightnessVal','postBrightness',v=>v.toFixed(2));
@@ -1766,7 +1798,10 @@ const SLIDER_BINDINGS=[
   ['haloSize','haloSize','haloSizeVal',v=>String(Math.round(v))],
   ['shadowOpacity','shadowOpacity','shadowOpacityVal',v=>v.toFixed(2)],
   ['shadowBlur','shadowBlur','shadowBlurVal',v=>v.toFixed(2)],
+  ['shadowSharpness','shadowSharpness','shadowSharpnessVal',v=>v.toFixed(2)],
   ['colorBleed','colorBleed','colorBleedVal',v=>v.toFixed(2)],
+  ['bleedSharpness','bleedSharpness','bleedSharpnessVal',v=>v.toFixed(2)],
+  ['causticSharpness','causticSharpness','causticSharpnessVal',v=>v.toFixed(2)],
   ['fogAmount','fogAmount','fogAmountVal',v=>v.toFixed(2)],
   ['postBrightness','postBrightness','postBrightnessVal',v=>v.toFixed(2)],
   ['postContrast','postContrast','postContrastVal',v=>v.toFixed(2)],
@@ -2177,7 +2212,7 @@ void main(){
 /* ---- caustics (vertex shader) ---- */
 const GPU_CAUSTIC_VS=GPU_COMMON+GPU_CAST+`
 attribute vec3 aPos;attribute vec3 aNrm;
-uniform float uLh,uGB,uCO,uT1,uT2,uSR,uPass;
+uniform float uLh,uGB,uCO,uT1,uT2,uSR,uPass,uSharp;
 uniform vec3 uCol;
 varying vec4 vC;varying float vSz,vRad;
 float refr(vec3 d,vec3 n,vec3 lp){
@@ -2213,8 +2248,9 @@ void main(){
   float fade=clamp(1.-length(vec2(d.x-CEN,d.z-CEN))/GRID,.2,1.);
   float ca=c*uCO*fade*uLh*1.2*uGB;
   float rad,al;
-  if(uPass<.5){rad=2.5*1.2*(.5+c*.8);al=ca*.9;}
-  else{if(c<=.3) return;rad=2.5*2.*c;al=ca*.3;}
+  float tight=mix(1.55,.68,clamp(uSharp,0.,1.));
+  if(uPass<.5){rad=2.5*1.2*(.5+c*.8)*tight;al=ca*.9;}
+  else{if(c<=.3) return;rad=2.5*2.*c*tight;al=ca*.3;}
   vec3 p=proj(sh);
   gl_Position=ndc(vec2(350.+p.x*SP,350.+(p.y+18.)*SP));
   gl_PointSize=2.*rad+2.;vSz=gl_PointSize;vRad=rad;
@@ -2222,6 +2258,12 @@ void main(){
 }`;
 
 /* ---- full-screen passes ---- */
+const GPU_GROUND_FS=GLSL_PREC+`uniform vec2 uObj,uRad,uPlane;
+uniform float uShadow,uBleed,uCaustic,uShadowSharp,uBleedSharp,uCausticSharp,uCount;
+uniform vec4 uLPos[4]; uniform vec4 uLCol[4];
+float ell(vec2 p,vec2 c,vec2 r,float soft){vec2 q=(p-c)/max(r,vec2(.001));float d=length(q);float w=max(.0001,soft);return exp(-pow(d,2.0)/(w*w));}
+void main(){vec2 p=vec2(gl_FragCoord.x,700.-gl_FragCoord.y);vec3 ground=vec3(0.);float shadow=0.,ca=0.;for(int i=0;i<4;i++){if(float(i)>=uCount)break;vec2 c=uLPos[i].xy;float strength=max(0.,uLPos[i].w);vec2 axis=normalize(c-uObj+vec2(.0001));vec2 perp=vec2(-axis.y,axis.x);float dist=length(c-uObj);vec2 sr=vec2(max(uRad.x*.72,12.)+dist*.34,max(uRad.y*.46,10.)+dist*.16);vec2 bp=sr*mix(1.9,.95,clamp(uBleedSharp,0.,1.));vec2 cp=sr*mix(1.7,.82,clamp(uCausticSharp,0.,1.));float sh=ell(p,c,sr,mix(.95,.20,clamp(uShadowSharp,0.,1.)));float bl=ell(p,c,bp,mix(1.2,.42,clamp(uBleedSharp,0.,1.)));float cu=ell(p,c+perp*sr.y*.18,cp,mix(1.25,.38,clamp(uCausticSharp,0.,1.)));shadow=max(shadow,sh*strength);ca=max(ca,cu*strength);ground+=uLCol[i].rgb*(bl*uBleed*.42+cu*uCaustic*.12);}float a=max(shadow*uShadow,max(length(ground),ca*uCaustic));vec3 rgb=ground*(1.-shadow*uShadow*.72)+vec3(ca*uCaustic*.08);gl_FragColor=vec4(clamp(rgb,0.,1.),clamp(a,0.,.92));}`;
+
 const GPU_QUAD_VS='attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
 const GPU_DOWN_FS=GLSL_PREC+`uniform sampler2D uA;uniform float uN;
 void main(){gl_FragColor=texture2D(uA,gl_FragCoord.xy/uN);}`;
@@ -2318,6 +2360,19 @@ void main(){
  gl_FragColor=vec4(rgb,a);
 }`;
 
+/* Restore the ground effects after AA/spread. The object stays filtered; the
+   shadow/bleed/caustic ground layer does not, except where the object covers it. */
+const GPU_RESTORE_FX_FS=GLSL_PREC+`uniform sampler2D uFiltered,uFx,uB,uF;
+uniform float uBackA,uFrontA,uMaster;
+void main(){
+  vec2 uv=gl_FragCoord.xy/700.;
+  vec4 filtered=texture2D(uFiltered,uv);
+  vec4 fx=texture2D(uFx,uv);
+  vec4 b=texture2D(uB,uv)*uBackA;
+  vec4 f=texture2D(uF,uv)*uFrontA;
+  float objectA=clamp(max(b.a,f.a)*uMaster,0.,1.);
+  gl_FragColor=mix(fx,filtered,objectA);
+}`;
 
 const initGPU=()=>{
   try{
@@ -2345,12 +2400,14 @@ const initGPU=()=>{
     P.voxel=prog((gpu.vtf?'':'#define NO_GTEX\n')+GPU_VOXEL_VS,GPU_FRAG,['aPos','aNrm','aCol']);
     P.stamp=prog(GPU_STAMP_VS,GPU_FRAG,['aPos','aBl']);
     P.caustic=prog(GPU_CAUSTIC_VS,GPU_FRAG,['aPos','aNrm']);
+    P.ground=prog(GPU_QUAD_VS,GPU_GROUND_FS,['p']);
     P.down=prog(GPU_QUAD_VS,GPU_DOWN_FS,['p']);
     P.up=prog(GPU_QUAD_VS,GPU_UP_FS,['p']);
     P.comp=prog(GPU_QUAD_VS,GPU_COMP_FS,['p']);
     P.pool=prog(GPU_QUAD_VS,GPU_POOL_FS,['p']);
     P.blit=prog(GPU_QUAD_VS,GPU_BLIT_FS,['p']);
     P.aa3=prog(GPU_QUAD_VS,GPU_AA3_FS,['p']);
+    P.restoreFx=prog(GPU_QUAD_VS,GPU_RESTORE_FX_FS,['p']);
     P.lens=prog(GPU_QUAD_VS,GPU_LENS_FS,['p']);
     P.spread=prog(GPU_QUAD_VS,GPU_SPREAD_FS,['p']);
     /* render targets */
@@ -2369,6 +2426,7 @@ const initGPU=()=>{
       return{t,f,n:w};
     };
     gpu.scene=target(CANVAS_SIZE,CANVAS_SIZE);
+    gpu.fx=target(CANVAS_SIZE,CANVAS_SIZE); /* unfiltered shadow/bleed/caustic layer */
     gpu.ground=target(CANVAS_SIZE,CANVAS_SIZE);
     gpu.vox=target(CANVAS_SIZE,CANVAS_SIZE);      /* back layer */
     gpu.voxF=target(CANVAS_SIZE,CANVAS_SIZE);     /* front layer */
@@ -2433,6 +2491,7 @@ const gpuRender=()=>{
   if(gpu.forDots!==state.dots) gpuUpload();
   const rotM=gpuRotMat();
   const BS=CANVAS_SIZE;
+  const bA=clamp(state.backOpacity,0,1),fA=clamp(state.frontOpacity,0,1),mA=clamp(state.voxelOpacity,0,1);
   const setAttrs=(buf,stride,specs)=>{
     gl.bindBuffer(gl.ARRAY_BUFFER,buf);
     for(let i=0;i<4;i++) gl.disableVertexAttribArray(i);
@@ -2463,130 +2522,42 @@ const gpuRender=()=>{
     gl.uniform1f(prog.u('uLh'),s.lh);
   };
 
-  /* 1. caustics, straight onto the scene */
-  if(causticOn&&shadowLights.length){
-    const C=P.caustic;
-    gl.useProgram(C.p);
-    setAttrs(gpu.main,9,[[0,3,0],[1,3,3]]);
-    gl.uniformMatrix3fv(C.u('uRot'),false,rotM);
-    gl.uniform1f(C.u('uCO'),state.causticOpacity);
-    gl.uniform1f(C.u('uT1'),(time*.003)%TAU);gl.uniform1f(C.u('uT2'),(time*.0005)%TAU);
-    gl.uniform1f(C.u('uSR'),state.shapeRadius);
-    gl.uniform3f(C.u('uCol'),caustCol.r/255,caustCol.g/255,caustCol.b/255);
-    for(const A of shadowLights){
-      gl.uniform1f(C.u('uGB'),A.gain*A.bright);
-      for(const s of A.shadowSamples){
-        setSample(C,s);
-        gl.uniform1f(C.u('uPass'),0);gl.drawArrays(gl.POINTS,0,gpu.mainN);
-        gl.uniform1f(C.u('uPass'),1);gl.drawArrays(gl.POINTS,0,gpu.mainN);
-      }
-    }
-  }
-
-  /* blur a stamp layer through the pyramid, return the finished texture */
-  const pyrCompose=w=>{
-    const pyr=gpu.pyr;
-    gl.disable(gl.BLEND);quad();
-    gl.useProgram(P.down.p);gl.uniform1i(P.down.u('uA'),0);
-    for(let i=1;i<pyr.down.length;i++){
-      target(pyr.down[i],pyr.down[i].n);
-      gl.uniform1f(P.down.u('uN'),pyr.down[i].n);
-      tex(0,pyr.down[i-1].t);
-      gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
-    }
-    gl.useProgram(P.up.p);gl.uniform1i(P.up.u('uA'),0);gl.uniform1i(P.up.u('uB'),1);
-    for(let i=pyr.down.length-1;i>=0;i--){
-      target(pyr.up[i],pyr.up[i].n);
-      gl.uniform1f(P.up.u('uN'),pyr.up[i].n);
-      gl.uniform1f(P.up.u('uW'),Math.min(1,w[i]));
-      const has=i<pyr.down.length-1;
-      gl.uniform1f(P.up.u('uHas'),has?1:0);
-      tex(0,pyr.down[i].t);
-      tex(1,has?pyr.up[i+1].t:pyr.down[i].t);
-      gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
-    }
-    return pyr.up[0].t;
-  };
-  const stampLayer=(kind,fn)=>{
-    const S=P.stamp,pyr=gpu.pyr;
-    target(pyr.down[0],256);
-    gl.disable(gl.BLEND);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
-    blendOn();
-    gl.useProgram(S.p);
-    setAttrs(gpu.shell,7,[[0,3,0],[1,4,3]]);
-    gl.uniformMatrix3fv(S.u('uRot'),false,rotM);
-    gl.uniform1f(S.u('uKind'),kind);
-    gl.uniform1f(S.u('uSr0'),DOT_RADIUS*1.9*256/BS);
-    gl.uniform1f(S.u('uBr'),DOT_RADIUS*4*256/BS);
-    fn(S);
-  };
-  const compositeLayer=(t,alpha,erase)=>{
-    target(gpu.scene,BS);blendOn();quad();
-    gl.useProgram(P.comp.p);gl.uniform1i(P.comp.u('uA'),0);tex(0,t);
-    gl.uniform1f(P.comp.u('uAlpha'),alpha);
-    gl.uniform1f(P.comp.u('uErase'),erase?erase.peak:0);
-    if(erase) gl.uniform3f(P.comp.u('uPool'),erase.x,erase.y,erase.r);
+  /* Continuous ground plane: analytic shadow / colour bleed / caustic fields. No ground dots. */
+  {
+    target(gpu.scene,BS);gl.disable(gl.BLEND);quad();const G=P.ground;gl.useProgram(G.p);
+    gl.uniform2f(G.u('uObj'),cx,cy-(18*SPACING));gl.uniform2f(G.u('uRad'),Math.max(24,state.shapeRadius*SPACING),Math.max(20,state.shapeRadius*.58*SPACING));gl.uniform2f(G.u('uPlane'),0,GROUND_Y);
+    gl.uniform1f(G.u('uShadow'),shadowOn?clamp(state.shadowOpacity,0,1):0);gl.uniform1f(G.u('uBleed'),state.colorBleed>.001?clamp(state.colorBleed*BLEED_MAX,0,1):0);gl.uniform1f(G.u('uCaustic'),causticOn?state.causticOpacity:0);
+    gl.uniform1f(G.u('uShadowSharp'),clamp(state.shadowSharpness,0,1));gl.uniform1f(G.u('uBleedSharp'),clamp(state.bleedSharpness,0,1));gl.uniform1f(G.u('uCausticSharp'),clamp(state.causticSharpness,0,1));
+    const maxL=Math.min(4,shadowLights.length);gl.uniform1f(G.u('uCount'),maxL);
+    for(let i=0;i<4;i++){let x=cx,y=cy-(18*SPACING),spread=state.shapeRadius*SPACING,strength=0,r=0,g=0,b=0;if(i<maxL){const A=shadowLights[i],s=A.center;let sx=CEN,sz=CEN;if(s.dir){sx=CEN-s.dir.x*(state.shapeRadius+35);sz=CEN-s.dir.z*(state.shapeRadius+35);}else{sx=s.x;sz=s.z;}const q=project(sx,GROUND_Y,sz,state.rotX,state.rotY,state.rotZ);x=cx+q.x*SPACING;y=cy+(q.y+18)*SPACING;spread=Math.max(18,state.shapeRadius*SPACING*(1+Math.min(2,A.gain*.35)));strength=clamp(A.gain*A.bright,0,2);r=A.lcol.r/255;g=A.lcol.g/255;b=A.lcol.b/255;}gl.uniform4f(G.u('uLPos['+i+']'),x,y,spread,strength);gl.uniform4f(G.u('uLCol['+i+']'),r,g,b,1);}
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
-  };
+  }
 
-  /* glow pool geometry */
-  let pool=null;
-  if(glowL>.001){
-    if(state.gcFor!==state.dots){
-      let sr=0,sg=0,sb=0,w=0;
-      for(const d of state.dots){
-        if(!d.surf||d.bw<.02) continue;
-        sr+=d.bsr*d.bw;sg+=d.bsg*d.bw;sb+=d.bsb*d.bw;w+=d.bw;
-      }
-      if(w>0){
-        const mx=Math.max(sr,sg,sb)||1;
-        state.gc={r:Math.round(sr*255/mx),g:Math.round(sg*255/mx),b:Math.round(sb*255/mx)};
-      }else state.gc={r:255,g:255,b:255};
-      state.gcFor=state.dots;
-    }
-    const poolCol=state.glowMatch?state.gc:hexToRgb(state.glowColor);
-    const coreCol={r:(poolCol.r*.7+255*.3)|0,g:(poolCol.g*.7+255*.3)|0,b:(poolCol.b*.7+255*.3)|0};
+  /* Save only shadow/colour-bleed/caustic ground effects before glow and voxels.
+     Final AA/spread is applied to the object composite, then this layer is restored. */
+  target(gpu.fx,BS);
+  gl.disable(gl.BLEND);quad();
+  gl.useProgram(P.blit.p);gl.uniform1i(P.blit.u('uA'),0);tex(0,gpu.scene.t);
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+
+  /* 4. glow pool -- build the GPU pool locally; do not rely on the CPU renderer's pool variable. */
+  if(glowOn){
     const pc=project(CEN,GROUND_Y,CEN,state.rotX,state.rotY,state.rotZ);
-    pool={x:cx+pc.x*SPACING,y:cy+(pc.y+18)*SPACING,
-      R:(state.shapeRadius*.8+state.haloSize*1.6+glowL*20)*SPACING,poolCol,coreCol};
-  }
-
-  /* 2. cast shadow */
-  if(shadowOn&&shadowLights.length){
-    stampLayer(0,S=>{
-      for(const A of shadowLights){
-        const n=A.shadowSamples.length,l=A.lcol;
-        gl.uniform1f(S.u('uShA'),SHADOW_STAMP*A.gain*A.bright*Math.max(1,4/n));
-        gl.uniform3f(S.u('uFill'),clamp(10+(l.r-128)*.05,0,40)/255,clamp(10+(l.g-128)*.05,0,40)/255,clamp(20+(l.b-128)*.05,0,50)/255);
-        for(const s of A.shadowSamples){setSample(S,s);gl.drawArrays(gl.POINTS,0,gpu.shellN);}
-      }
-    });
-    const blurPx=SHADOW_BLUR_MIN+state.shadowBlur*(SHADOW_BLUR_MAX-SHADOW_BLUR_MIN);
-    const t=pyrCompose(pyramidWeights(shadowPyr,blurPx,2.8));
-    compositeLayer(t,clamp(state.shadowOpacity,0,1),pool?{peak:clamp(glowL*1.8,0,1),x:pool.x,y:pool.y,r:pool.R*1.15}:null);
-  }
-
-  /* 3. colour bleed */
-  if(state.colorBleed>.001&&shadowLights.length){
-    stampLayer(1,S=>{
-      for(const A of shadowLights){
-        gl.uniform1f(S.u('uGB'),A.gain*A.bright);
-        setSample(S,A.center);
-        gl.drawArrays(gl.POINTS,0,gpu.shellN);
-      }
-    });
-    const t=pyrCompose(pyramidWeights(bleedPyr,BLEED_BLUR,2.6));
-    compositeLayer(t,clamp(state.colorBleed*BLEED_MAX,0,1),null);
-  }
-
-  /* 4. glow pool */
-  if(pool){
+    const poolX=cx+pc.x*SPACING, poolY=cy+(pc.y+18)*SPACING;
+    const poolR=(state.shapeRadius*.8+state.haloSize*1.6+glowL*20)*SPACING;
+    let poolCol;
+    if(state.glowMatch){
+      poolCol=state.gc||hexToRgb(state.color);
+    }else{
+      poolCol=hexToRgb(state.glowColor);
+    }
+    const coreCol={r:(poolCol.r*.7+255*.3)|0,g:(poolCol.g*.7+255*.3)|0,b:(poolCol.b*.7+255*.3)|0};
     target(gpu.scene,BS);blendOn();quad();
     const Q=P.pool;
     gl.useProgram(Q.p);
-    gl.uniform3f(Q.u('uPC'),pool.x,pool.y,pool.R);
-    gl.uniform3f(Q.u('uCol'),pool.poolCol.r/255,pool.poolCol.g/255,pool.poolCol.b/255);
-    gl.uniform3f(Q.u('uCore'),pool.coreCol.r/255,pool.coreCol.g/255,pool.coreCol.b/255);
+    gl.uniform3f(Q.u('uPC'),poolX,poolY,poolR);
+    gl.uniform3f(Q.u('uCol'),poolCol.r/255,poolCol.g/255,poolCol.b/255);
+    gl.uniform3f(Q.u('uCore'),coreCol.r/255,coreCol.g/255,coreCol.b/255);
     gl.uniform2f(Q.u('uPk'),clamp(glowL*1.4,0,.95),clamp(glowL*1.1,0,.8));
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   }
@@ -2635,7 +2606,6 @@ const gpuRender=()=>{
     gl.uniform1f(V.u('uNormPass'),0);
 
     /* front / back layers: the depth-sorted list is cut at the split, back part first */
-    const bA=clamp(state.backOpacity,0,1),fA=clamp(state.frontOpacity,0,1),mA=clamp(state.voxelOpacity,0,1);
     const bend=state.lensBend,lensOn=Math.abs(bend)>.001;
     let lo=0,hi=gpu.mainN;
     while(lo<hi){const m=(lo+hi)>>1;if(gpu.zs[m]<state.split) lo=m+1;else hi=m;}
@@ -2664,7 +2634,9 @@ const gpuRender=()=>{
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   }
 
-  /* 6. optional gimp-style spread (ping-pong passes), then onto the visible canvas */
+  /* 6. optional gimp-style spread / final AA.
+     These post filters operate on the object composite only. The three ground
+     effects saved in gpu.fx are restored afterwards, so they remain crisp. */
   gl.disable(gl.BLEND);
   quad();
   let src=gpu.out;
@@ -2672,9 +2644,9 @@ const gpuRender=()=>{
     const Sp=P.spread,n=Math.max(1,Math.min(8,state.spreadPasses|0));
     gl.useProgram(Sp.p);gl.uniform1i(Sp.u('uA'),0);gl.uniform2f(Sp.u('uAmt'),state.spreadX,state.spreadY);
     for(let i=0;i<n;i++){
-      const last=i===n-1,dst=last?null:(src===gpu.out?gpu.tmp:gpu.out);
+      const dst=src===gpu.out?gpu.tmp:gpu.out;
       target(dst,BS);
-      if(last){gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);}
+      gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
       gl.uniform1f(Sp.u('uSeed'),state.spreadSeed+i*7.31);
       tex(0,src.t);
       gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
@@ -2686,11 +2658,22 @@ const gpuRender=()=>{
     gl.useProgram(P.aa3.p);gl.uniform1i(P.aa3.u('uA'),0);tex(0,src.t);
     gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
-    target(null,BS);
-    gl.useProgram(P.blit.p);gl.uniform1i(P.blit.u('uA'),0);tex(0,gpu.tmp.t);
-    gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    src=gpu.tmp;
   }
+
+  /* restore the unfiltered ground effects outside the object silhouette */
+  target(null,BS);
+  gl.useProgram(P.restoreFx.p);
+  gl.uniform1i(P.restoreFx.u('uFiltered'),0);
+  gl.uniform1i(P.restoreFx.u('uFx'),1);
+  gl.uniform1i(P.restoreFx.u('uB'),2);
+  gl.uniform1i(P.restoreFx.u('uF'),3);
+  tex(0,src.t);tex(1,gpu.fx.t);tex(2,gpu.vox.t);tex(3,gpu.voxF.t);
+  gl.uniform1f(P.restoreFx.u('uBackA'),bA);
+  gl.uniform1f(P.restoreFx.u('uFrontA'),fA);
+  gl.uniform1f(P.restoreFx.u('uMaster'),mA);
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+
   gl.activeTexture(gl.TEXTURE0);
   present2D();
 };
@@ -2704,8 +2687,8 @@ const voxCtx=voxLayer.getContext('2d');
 const grpLayer=document.createElement('canvas');grpLayer.width=grpLayer.height=CANVAS_SIZE;
 const grpCtx=grpLayer.getContext('2d');
 /* cpu-renderer spread: every pixel takes a random neighbour within +-amount/2, repeated per pass */
-const spreadCPU=()=>{
-  const W=CANVAS_SIZE,img=ctx.getImageData(0,0,W,W);
+const spreadCPU=(targetCtx=ctx)=>{
+  const W=CANVAS_SIZE,img=targetCtx.getImageData(0,0,W,W);
   let a=img.data,b=new Uint8ClampedArray(a.length);
   const ax=state.spreadX,ay=state.spreadY,n=Math.max(1,Math.min(8,state.spreadPasses|0));
   for(let p=0;p<n;p++){
@@ -2720,7 +2703,7 @@ const spreadCPU=()=>{
     const t=a;a=b;b=t;
   }
   img.data.set(a);
-  ctx.putImageData(img,0,0);
+  targetCtx.putImageData(img,0,0);
 };
 const renderCPU=()=>{
   time+=16;
@@ -2738,56 +2721,16 @@ const renderCPU=()=>{
   const go=state.glowOpacity,glowOn=go>.001;
   const glowL=glowOn?clamp(go*state.glowStrength/2,0,1):0;
 
-  /* cast shadow: only shell voxels stamp (interior ones are hidden behind them anyway, and
-     this lets each stamp be opaque enough to survive 8-bit alpha). Stamps go to a small layer
-     that is blurred through the pyramid, so the hatching from sparse area-light samples melts
-     away and the penumbra is smooth. Caustics stay on the main canvas.
-     Works for every shadow-casting light: area/point (positional) and sun (parallel rays). */
-  const causticOn=state.causticOpacity>.01,shadowOn=state.shadowOpacity>.001;
-  const sx0=shadowPyr.ctx,ss=shadowPyr.scale,sr0=DOT_RADIUS*1.9*ss;
-  if(shadowOn) shadowPyr.clear();
-  let shadowAny=false;
-  for(const d of list){
-    const stamp=shadowOn&&d.surf;
-    if(!stamp&&!causticOn) continue;
-    const fade=clamp(1-Math.hypot(d.x-CEN,d.z-CEN)/GRID,.2,1);
-    for(const A of shadowLights){
-      const samples=A.shadowSamples;
-      /* single-sample lights (point, sun) get the stamp strength a 2x2 area light would have */
-      const shadowAlpha=SHADOW_STAMP*A.gain*A.bright*Math.max(1,4/samples.length);
-      for(const s of samples){
-        const sh=castShadow(d.x,d.y,d.z,s);
-        if(!sh) continue;
-        const lh=s.lh;
-        const psh=project(sh.x,sh.y,sh.z,state.rotX,state.rotY,state.rotZ);
-        const sx=cx+psh.x*SPACING,sy=cy+(psh.y+18)*SPACING;
-        if(stamp){
-          /* long, stretched shadows from low lights melt away with distance instead of leaving faint ghost outlines */
-          const reach=clamp((SHADOW_REACH-Math.hypot(sh.x-CEN,sh.z-CEN))/(SHADOW_REACH-SHADOW_FULL),0,1);
-          const a=shadowAlpha*fade*lh*reach;
-          if(a>.008){
-            sx0.fillStyle=A.fillCol+a+')';
-            sx0.beginPath();sx0.arc(sx*ss,sy*ss,sr0,0,TAU);sx0.fill();
-            shadowAny=true;
-          }
-        }
-        if(causticOn){
-          let lx,ly,lz,rx,rz;
-          if(s.dir){
-            lx=d.x+s.dir.x*FAR;ly=d.y+s.dir.y*FAR;lz=d.z+s.dir.z*FAR;
-            rx=CEN+s.dir.x*FAR;rz=CEN+s.dir.z*FAR;
-          }else{lx=s.x;ly=s.y;lz=s.z;rx=lx;rz=lz;}
-          const c=Math.max(refractCaustic(d,lx,ly,lz,time),causticRing(sh.x,sh.z,rx,ly,rz,time));
-          if(c>.05){
-            const ca=c*state.causticOpacity*fade*lh*1.2*A.gain*A.bright;
-            ctx.beginPath();ctx.arc(sx,sy,DOT_RADIUS*1.2*(.5+c*.8),0,Math.PI*2);
-            ctx.fillStyle=`rgba(${caustCol.r},${caustCol.g},${caustCol.b},${ca*.9})`;ctx.fill();
-            if(c>.3){ctx.beginPath();ctx.arc(sx,sy,DOT_RADIUS*2*c,0,Math.PI*2);ctx.fillStyle=`rgba(${caustCol.r},${caustCol.g},${caustCol.b},${ca*.3})`;ctx.fill();}
-          }
-        }
-      }
-    }
+  /* Continuous ground plane fallback — smooth analytic gradients, never ground dots. */
+  const groundY=cy+(project(CEN,GROUND_Y,CEN,state.rotX,state.rotY,state.rotZ).y+18)*SPACING,objX=cx,objY=groundY,objRX=Math.max(24,state.shapeRadius*SPACING),objRY=Math.max(20,state.shapeRadius*.58*SPACING);
+  ctx.save();ctx.globalCompositeOperation='source-over';
+  for(const A of shadowLights.slice(0,4)){const s=A.center;let sx=CEN,sz=CEN;if(s.dir){sx=CEN-s.dir.x*(state.shapeRadius+35);sz=CEN-s.dir.z*(state.shapeRadius+35);}else{sx=s.x;sz=s.z;}const q=project(sx,GROUND_Y,sz,state.rotX,state.rotY,state.rotZ),x=cx+q.x*SPACING,y=cy+(q.y+18)*SPACING;const rx=Math.max(18,objRX*(1+Math.min(2,A.gain*.35))),ry=Math.max(12,objRY*(1+Math.min(1.5,A.gain*.2)));
+    if(state.shadowOpacity>.001){const g=ctx.createRadialGradient(x,y,0,x,y,rx),sh=clamp(state.shadowOpacity*A.bright,0,.72),sharp=clamp(state.shadowSharpness,0,1);g.addColorStop(0,`rgba(0,0,0,${sh})`);g.addColorStop(Math.max(.2,.55-sharp*.25),`rgba(0,0,0,${sh*.55})`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.save();ctx.translate(x,y);ctx.scale(1,ry/rx);ctx.translate(-x,-y);ctx.fillStyle=g;ctx.fillRect(x-rx,y-rx,rx*2,rx*2);ctx.restore();}
+    if(state.colorBleed>.001){const c=A.lcol,brx=rx*(1.25+(1-clamp(state.bleedSharpness,0,1))*.8),bry=ry*(1.25+(1-clamp(state.bleedSharpness,0,1))*.8),g=ctx.createRadialGradient(x,y,0,x,y,brx),aa=clamp(state.colorBleed*BLEED_MAX*A.bright*.30,0,.35);g.addColorStop(0,`rgba(${c.r},${c.g},${c.b},${aa})`);g.addColorStop(.55,`rgba(${c.r},${c.g},${c.b},${aa*.35})`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.save();ctx.translate(x,y);ctx.scale(1,bry/brx);ctx.translate(-x,-y);ctx.fillStyle=g;ctx.fillRect(x-brx,y-brx,brx*2,brx*2);ctx.restore();}
+    if(causticOn){const c=state.texture?{r:255,g:255,b:255}:brightenHex(state.color,.7),crx=rx*(.8+(1-clamp(state.causticSharpness,0,1))*.6),cry=ry*(.8+(1-clamp(state.causticSharpness,0,1))*.6),g=ctx.createRadialGradient(x,y,0,x,y,crx),aa=clamp(state.causticOpacity*A.bright*.18,0,.16);g.addColorStop(0,`rgba(${c.r},${c.g},${c.b},${aa})`);g.addColorStop(.5,`rgba(${c.r},${c.g},${c.b},${aa*.35})`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.save();ctx.translate(x,y);ctx.scale(1,cry/crx);ctx.translate(-x,-y);ctx.fillStyle=g;ctx.fillRect(x-crx,y-crx,crx*2,crx*2);ctx.restore();}
   }
+  ctx.restore();
+
   /* ---- glow light: a bright round pool of emitted light on the ground ----
      Perfectly round radial falloff centred under the object, colour taken from the object itself,
      with a white-hot core. The glow is emitted, so nothing blocks it: it fills the shadows in
@@ -2825,7 +2768,8 @@ const renderCPU=()=>{
   const glowPool=glowL>.001;
 
   if(shadowOn&&shadowAny){
-    const blurPx=SHADOW_BLUR_MIN+state.shadowBlur*(SHADOW_BLUR_MAX-SHADOW_BLUR_MIN);
+    const blurBase=SHADOW_BLUR_MIN+state.shadowBlur*(SHADOW_BLUR_MAX-SHADOW_BLUR_MIN);
+    const blurPx=SHADOW_BLUR_MIN+(blurBase-SHADOW_BLUR_MIN)*(1-clamp(state.shadowSharpness,0,1));
     const pool=shadowPyr.compose(pyramidWeights(shadowPyr,blurPx,2.8));
     if(glowPool){
       /* light fills the shadow: knock the darkness out wherever the glow reaches */
@@ -2869,7 +2813,8 @@ const renderCPU=()=>{
       }
     }
     if(any){
-      const pool=bleedPyr.compose(pyramidWeights(bleedPyr,BLEED_BLUR,2.6));
+      const bleedBlur=6+(BLEED_BLUR-6)*(1-clamp(state.bleedSharpness,0,1));
+      const pool=bleedPyr.compose(pyramidWeights(bleedPyr,bleedBlur,2.6));
       ctx.save();
       ctx.globalAlpha=clamp(state.colorBleed*BLEED_MAX,0,1);
       ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
@@ -2926,10 +2871,12 @@ const renderCPU=()=>{
       c2.fillStyle=fills[i];c2.fill();
     }
   };
+  /* Keep the object on its own transparent layer. This lets the final spread
+     affect only the object; shadow/bleed/caustic remain untouched underneath. */
+  grpCtx.clearRect(0,0,CANVAS_SIZE,CANVAS_SIZE);
   if(fO>=.999&&bO>=.999&&mO>=.999){
-    paint(ctx,0,list.length);
+    paint(grpCtx,0,list.length);
   }else{
-    grpCtx.clearRect(0,0,CANVAS_SIZE,CANVAS_SIZE);
     if(bO>.001&&nb>0){
       voxCtx.clearRect(0,0,CANVAS_SIZE,CANVAS_SIZE);paint(voxCtx,0,nb);
       grpCtx.globalAlpha=bO;grpCtx.drawImage(voxLayer,0,0);
@@ -2939,9 +2886,9 @@ const renderCPU=()=>{
       grpCtx.globalAlpha=fO;grpCtx.drawImage(voxLayer,0,0);
     }
     grpCtx.globalAlpha=1;
-    if(mO>.001){ctx.save();ctx.globalAlpha=mO;ctx.drawImage(grpLayer,0,0);ctx.restore();}
   }
-  if(state.spreadOn&&(state.spreadX>0||state.spreadY>0)) spreadCPU();
+  if(state.spreadOn&&(state.spreadX>0||state.spreadY>0)) spreadCPU(grpCtx);
+  if(mO>.001){ctx.save();ctx.globalAlpha=mO;ctx.drawImage(grpLayer,0,0);ctx.restore();}
 };
 
 const frame=()=>{
