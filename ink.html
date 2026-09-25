@@ -2720,6 +2720,7 @@ const renderCPU=()=>{
      Driven by both glow sliders, so raising either one makes the colour bleed brighter, wider and bolder. */
   const go=state.glowOpacity,glowOn=go>.001;
   const glowL=glowOn?clamp(go*state.glowStrength/2,0,1):0;
+  const causticOn=state.causticOpacity>.01;
 
   /* Continuous ground plane fallback — smooth analytic gradients, never ground dots. */
   const groundY=cy+(project(CEN,GROUND_Y,CEN,state.rotX,state.rotY,state.rotZ).y+18)*SPACING,objX=cx,objY=groundY,objRX=Math.max(24,state.shapeRadius*SPACING),objRY=Math.max(20,state.shapeRadius*.58*SPACING);
