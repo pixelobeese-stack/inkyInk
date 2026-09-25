@@ -119,7 +119,7 @@ canvas{display:block;width:100%;max-width:700px;height:auto;background:transpare
         <button id="meshClear">clear</button>
       </div>
       <div class="row"><label>z is up</label><input type="checkbox" id="meshZUp"></div>
-      <div class="note">voxelizes the mesh to fit the grid in a single flat color (the palette color below) — texture and gradient are ignored for imported meshes. closed / watertight solids voxelize best. "z is up" rotates models exported with z as the vertical axis (common for stl). large meshes can take a few seconds; this is a simple grid voxelizer, not a precision converter</div>
+      <div class="note">samples points directly off the mesh's real triangles, scaled to fit, in a single flat color (the palette color below) — texture and gradient are ignored for imported meshes. works on open/non-watertight meshes too, since there's no inside/outside test. "z is up" rotates models exported with z as the vertical axis (common for stl). very dense meshes can take a moment to sample</div>
       <div class="note" id="meshMsg"></div>
     </div>
   </div>
@@ -336,6 +336,7 @@ canvas{display:block;width:100%;max-width:700px;height:auto;background:transpare
 <script>
 (function(){
 const GRID=256,LAYERS=256,DOT_RADIUS=1.0,SPACING=0.9;
+const SURFACE_PITCH=1.0; /* target spacing between dots sampled directly off a true surface (mesh, or procedural shape) */
 const CANVAS_SIZE=700,GROUND_Y=100,CEN=GRID/2,MAX_DEPTH=GRID;
 const FOG_COLOR={r:30,g:30,b:35};
 const MS_PAINT_COLORS=[
@@ -507,57 +508,72 @@ const UV_MAPPERS={
   }
 };
 
-/* shape makers now take a color provider fn instead of a single color */
+/* shape makers now sample points directly off the true continuous surface (mesh math, not a
+   voxel lattice) so silhouettes and shading are smooth at any zoom instead of stair-stepping.
+   They still take a color provider fn instead of a single color, and still emit {x,y,z,color,nx,ny,nz} —
+   x/y/z are just floats now (grid-centered) instead of integer lattice indices. */
 const createSphere=(r,getColor)=>{
-  const d=[];
-  for(let x=0;x<GRID;x++)for(let y=0;y<GRID;y++)for(let z=0;z<LAYERS;z++){
-    const s=x-CEN,t=y-CEN,u=z-CEN;
-    if(s*s+t*t+u*u<=r*r){
-      const n=sphereNormal(s,t,u);
-      d.push({x,y,z,color:getColor(s,t,u),nx:n.x,ny:n.y,nz:n.z});
-    }
+  const d=[],area=4*Math.PI*r*r,n=Math.max(8,Math.round(area/(SURFACE_PITCH*SURFACE_PITCH)));
+  const golden=Math.PI*(3-Math.sqrt(5));
+  for(let i=0;i<n;i++){
+    const yFrac=n>1?1-(i/(n-1))*2:0,rad=Math.sqrt(Math.max(0,1-yFrac*yFrac)),theta=golden*i;
+    const nx=Math.cos(theta)*rad,ny=yFrac,nz=Math.sin(theta)*rad;
+    const s=nx*r,t=ny*r,u=nz*r;
+    d.push({x:s+CEN,y:t+CEN,z:u+CEN,color:getColor(s,t,u),nx,ny,nz});
   }
   return d;
 };
 
 const createCube=(half,getColor)=>{
-  const d=[];
-  for(let x=0;x<GRID;x++)for(let y=0;y<GRID;y++)for(let z=0;z<LAYERS;z++){
-    const s=x-CEN,t=y-CEN,u=z-CEN;
-    if(Math.abs(s)<=half&&Math.abs(t)<=half&&Math.abs(u)<=half){
-      const n=cubeNormal(s,t,u,half);
-      d.push({x,y,z,color:getColor(s,t,u),nx:n.x,ny:n.y,nz:n.z});
+  const d=[],n=Math.max(2,Math.round((2*half)/SURFACE_PITCH)),step=(2*half)/n;
+  const faces=[{axis:'x',sign:1},{axis:'x',sign:-1},{axis:'y',sign:1},{axis:'y',sign:-1},{axis:'z',sign:1},{axis:'z',sign:-1}];
+  for(const f of faces){
+    for(let i=0;i<=n;i++)for(let j=0;j<=n;j++){
+      const a=-half+i*step,b=-half+j*step;
+      let s,t,u,nx=0,ny=0,nz=0;
+      if(f.axis==='x'){s=f.sign*half;t=a;u=b;nx=f.sign;}
+      else if(f.axis==='y'){s=a;t=f.sign*half;u=b;ny=f.sign;}
+      else{s=a;t=b;u=f.sign*half;nz=f.sign;}
+      d.push({x:s+CEN,y:t+CEN,z:u+CEN,color:getColor(s,t,u),nx,ny,nz});
     }
   }
   return d;
 };
 
 const createTorus=(R,r,getColor)=>{
-  const d=[];
-  for(let x=0;x<GRID;x++)for(let y=0;y<GRID;y++)for(let z=0;z<LAYERS;z++){
-    const s=x-CEN,t=y-CEN,u=z-CEN;
-    const rad=Math.hypot(s,u);
-    const qx=rad-R;
-    if(qx*qx+t*t<=r*r){
-      const n=torusNormal(s,t,u,R,r);
-      d.push({x,y,z,color:getColor(s,t,u),nx:n.x,ny:n.y,nz:n.z});
+  const d=[],nu=Math.max(8,Math.round(TAU*(R+r)/SURFACE_PITCH)),nv=Math.max(8,Math.round(TAU*r/SURFACE_PITCH));
+  for(let i=0;i<nu;i++){
+    const uAng=(i/nu)*TAU,cu=Math.cos(uAng),su=Math.sin(uAng);
+    for(let j=0;j<nv;j++){
+      const vAng=(j/nv)*TAU,cv=Math.cos(vAng),sv=Math.sin(vAng),rad=R+r*cv;
+      const s=rad*cu,t=r*sv,u=rad*su,nx=cv*cu,ny=sv,nz=cv*su;
+      d.push({x:s+CEN,y:t+CEN,z:u+CEN,color:getColor(s,t,u),nx,ny,nz});
     }
   }
   return d;
 };
 
 const createCone=(R0,H,getColor)=>{
-  const halfH=H/2,k=R0/H;
-  const d=[];
-  for(let x=0;x<GRID;x++)for(let y=0;y<GRID;y++)for(let z=0;z<LAYERS;z++){
-    const s=x-CEN,t=y-CEN,u=z-CEN;
-    if(t<-halfH||t>halfH) continue;
-    const Rt=k*(halfH-t);
-    if(Math.hypot(s,u)<=Rt){
-      const n=coneNormal(s,t,u,R0,H);
-      d.push({x,y,z,color:getColor(s,t,u),nx:n.x,ny:n.y,nz:n.z});
+  const d=[],halfH=H/2,k=R0/H,slant=Math.hypot(R0,H);
+  const nu=Math.max(8,Math.round(TAU*R0/SURFACE_PITCH)),nt=Math.max(2,Math.round(slant/SURFACE_PITCH));
+  for(let i=0;i<nu;i++){
+    const ang=(i/nu)*TAU,ca=Math.cos(ang),sa=Math.sin(ang);
+    for(let j=0;j<=nt;j++){
+      const t=-halfH+(j/nt)*H,Rt=k*(halfH-t);
+      const s=Rt*ca,u=Rt*sa;
+      let nx=ca,ny=k,nz=sa;const ln=Math.hypot(nx,ny,nz)||1;nx/=ln;ny/=ln;nz/=ln;
+      d.push({x:s+CEN,y:t+CEN,z:u+CEN,color:getColor(s,t,u),nx,ny,nz});
     }
   }
+  const nr=Math.max(1,Math.round(R0/SURFACE_PITCH));
+  for(let ri=1;ri<=nr;ri++){
+    const rad=ri/nr*R0,circ=TAU*rad,nc=Math.max(8,Math.round(circ/SURFACE_PITCH));
+    for(let ci=0;ci<nc;ci++){
+      const ang=(ci/nc)*TAU,s=rad*Math.cos(ang),u=rad*Math.sin(ang),t=-halfH;
+      d.push({x:s+CEN,y:t+CEN,z:u+CEN,color:getColor(s,t,u),nx:0,ny:-1,nz:0});
+    }
+  }
+  d.push({x:CEN,y:-halfH+CEN,z:CEN,color:getColor(0,-halfH,0),nx:0,ny:-1,nz:0});
   return d;
 };
 
@@ -568,8 +584,23 @@ const SHAPES={
   cone:{make:getC=>createCone(64,136,getC),radius:64}
 };
 
-/* per-voxel prep: flag outer-shell voxels and cache chroma (color bleed) */
-const prepDots=dots=>{
+/* prep pass: cache chroma (for color bleed) on every dot, and flag which are on the visible shell.
+   alreadySurface=true (procedural shapes + imported meshes, both now sampled directly off the true
+   surface) skips the neighbor-occupancy culling below — there's no interior fill to cull, every
+   sampled point already lies on the shell. The legacy integer-lattice culling is kept only for the
+   extruded letter shape, which still fills a voxel grid and needs its shell extracted. */
+const prepDots=(dots,alreadySurface)=>{
+  const cache=d=>{
+    const c=hexToRgb(d.color),lum=.299*c.r+.587*c.g+.114*c.b;
+    d.c=c;d.lum=lum;
+    const chroma=Math.hypot(c.r-lum,c.g-lum,c.b-lum),mx=Math.max(c.r,c.g,c.b)||1;
+    d.bw=clamp(chroma/90,0,1);
+    d.bsr=c.r*195/mx|0;d.bsg=c.g*195/mx|0;d.bsb=c.b*195/mx|0;
+  };
+  if(alreadySurface){
+    for(const d of dots){d.surf=true;cache(d);}
+    return dots;
+  }
   const key=(x,y,z)=>((x+2)*260+(y+2))*260+(z+2);
   const occ=new Set();
   for(const d of dots) occ.add(key(d.x,d.y,d.z));
@@ -581,11 +612,7 @@ const prepDots=dots=>{
                   occ.has(key(d.x,d.y,d.z+1))&&occ.has(key(d.x,d.y,d.z-1)));
     if(!isSurf) continue;
     d.surf=true;
-    const c=hexToRgb(d.color),lum=.299*c.r+.587*c.g+.114*c.b;
-    d.c=c;d.lum=lum;
-    const chroma=Math.hypot(c.r-lum,c.g-lum,c.b-lum),mx=Math.max(c.r,c.g,c.b)||1;
-    d.bw=clamp(chroma/90,0,1);
-    d.bsr=c.r*195/mx|0;d.bsg=c.g*195/mx|0;d.bsb=c.b*195/mx|0;
+    cache(d);
     out.push(d);
   }
   return out;
@@ -600,7 +627,7 @@ const rebuildShape=()=>{
       return;
     }
     const col=state.color;
-    state.dots=prepDots(state.meshDots.map(d=>({x:d.x,y:d.y,z:d.z,nx:d.nx,ny:d.ny,nz:d.nz,color:col})));
+    state.dots=prepDots(state.meshDots.map(d=>({x:d.x,y:d.y,z:d.z,nx:d.nx,ny:d.ny,nz:d.nz,color:col})),true);
     state.shapeRadius=state.meshRadius||20;
     return;
   }
@@ -625,7 +652,7 @@ const rebuildShape=()=>{
   }else{
     getC=()=>state.color;
   }
-  state.dots=prepDots(def.make(getC));
+  state.dots=prepDots(def.make(getC),true);
   state.shapeRadius=def.radius;
 };
 
@@ -1424,8 +1451,46 @@ const voxelizeMesh=tris=>{
   return occ;
 };
 
+/* samples points directly off the mesh's true triangles (stratified within each triangle,
+   density proportional to its area) instead of filling a voxel grid — so the result sits exactly
+   on the real surface with no lattice stair-stepping, and open/non-watertight meshes work fine too
+   since there's no inside/outside test. A point budget keeps very detailed meshes from over-sampling. */
+const MESH_POINT_BUDGET=260000;
+const sampleMeshSurface=tris=>{
+  const areas=new Array(tris.length),normals=new Array(tris.length);
+  let totalArea=0;
+  for(let i=0;i<tris.length;i++){
+    const[p0,p1,p2]=tris[i];
+    const e1x=p1.x-p0.x,e1y=p1.y-p0.y,e1z=p1.z-p0.z;
+    const e2x=p2.x-p0.x,e2y=p2.y-p0.y,e2z=p2.z-p0.z;
+    const cx=e1y*e2z-e1z*e2y,cy=e1z*e2x-e1x*e2z,cz=e1x*e2y-e1y*e2x;
+    const clen=Math.hypot(cx,cy,cz),area=clen*.5;
+    areas[i]=area;totalArea+=area;
+    normals[i]=clen>1e-9?{x:cx/clen,y:cy/clen,z:cz/clen}:{x:0,y:1,z:0};
+  }
+  const pitch=Math.max(SURFACE_PITCH,Math.sqrt(totalArea/MESH_POINT_BUDGET));
+  const dots=[];
+  for(let i=0;i<tris.length;i++){
+    const area=areas[i];
+    if(area<1e-9) continue;
+    const[p0,p1,p2]=tris[i],n=normals[i];
+    const count=Math.max(1,Math.round(area/(pitch*pitch)));
+    for(let k=0;k<count;k++){
+      let r1=Math.random(),r2=Math.random();
+      if(r1+r2>1){r1=1-r1;r2=1-r2;}
+      const r0=1-r1-r2;
+      const x=r0*p0.x+r1*p1.x+r2*p2.x;
+      const y=r0*p0.y+r1*p1.y+r2*p2.y;
+      const z=r0*p0.z+r1*p1.z+r2*p2.z;
+      dots.push({x:x+CEN,y:y+CEN,z:z+CEN,nx:n.x,ny:n.y,nz:n.z});
+    }
+  }
+  return dots;
+};
+
 /* approximate surface normals from the occupancy field itself: the outward direction is where
-   the solid/empty field decreases fastest, i.e. -gradient(occupied) */
+   the solid/empty field decreases fastest, i.e. -gradient(occupied) — still used for the
+   extruded letter shape below, which fills a voxel grid rather than sampling true triangles */
 const occToMeshDots=occ=>{
   const N=GRID,idx=(x,y,z)=>(x*N+y)*N+z,dots=[];
   for(let x=0;x<N;x++)for(let y=0;y<N;y++)for(let z=0;z<N;z++){
@@ -1463,11 +1528,10 @@ const importMeshFile=async file=>{
   }
   if(triList.length>MESH_MAX_TRIS) throw new Error('mesh has '+triList.length+' triangles — try a simpler model (up to '+MESH_MAX_TRIS+')');
   centerScaleVerts(uniqueVerts,meshZUp.checked);
-  meshMsg.textContent='voxelizing '+triList.length+' triangles…';
+  meshMsg.textContent='sampling surface of '+triList.length+' triangles…';
   await new Promise(r=>setTimeout(r,0));
-  const occ=voxelizeMesh(triList);
-  const dots=occToMeshDots(occ);
-  if(!dots.length) throw new Error('voxelization produced no solid voxels — the mesh may not be a closed/watertight solid');
+  const dots=sampleMeshSurface(triList);
+  if(!dots.length) throw new Error('surface sampling produced no points — the mesh may have no valid (non-degenerate) triangles');
   state.meshDots=dots;
   state.meshRadius=VOX_TARGET_RADIUS;
   state.texture=null;state.textureKind=null;
@@ -1476,7 +1540,7 @@ const importMeshFile=async file=>{
   state.shape='mesh';
   shapeSelect.value='mesh';
   rebuildShape();
-  meshMsg.textContent='loaded '+file.name+' — '+triList.length+' triangles \u2192 '+dots.length+' voxels, single color';
+  meshMsg.textContent='loaded '+file.name+' — '+triList.length+' triangles \u2192 '+dots.length+' points, single color';
 };
 
 meshInput.addEventListener('change',e=>{
@@ -2230,6 +2294,30 @@ void main(){
 }`;
 const GPU_BLIT_FS=GLSL_PREC+`uniform sampler2D uA;
 void main(){gl_FragColor=texture2D(uA,gl_FragCoord.xy/700.);}`;
+const GPU_AA3_FS=GLSL_PREC+`uniform sampler2D uA;
+vec4 S(vec2 u){return texture2D(uA,clamp(u,vec2(0.),vec2(1.)));}
+void main(){
+ vec2 u=gl_FragCoord.xy/700.;
+ vec2 p=vec2(1./700.);
+ /* strong 3px-radius 7x7 Gaussian-like reconstruction.
+    Accumulate premultiplied RGB so transparent edges do not create dark/bright halos. */
+ float w[7];
+ w[0]=1.; w[1]=2.; w[2]=3.; w[3]=4.; w[4]=3.; w[5]=2.; w[6]=1.;
+ vec3 rgb=vec3(0.); float a=0.; float total=0.;
+ for(int y=-3;y<=3;y++){
+   for(int x=-3;x<=3;x++){
+     float ww=w[x+3]*w[y+3];
+     vec4 c=S(u+vec2(float(x),float(y))*p);
+     rgb+=c.rgb*c.a*ww;
+     a+=c.a*ww;
+     total+=ww;
+   }
+ }
+ a/=total;
+ if(a>0.0001) rgb/=max(a*total,0.0001);
+ gl_FragColor=vec4(rgb,a);
+}`;
+
 
 const initGPU=()=>{
   try{
@@ -2262,6 +2350,7 @@ const initGPU=()=>{
     P.comp=prog(GPU_QUAD_VS,GPU_COMP_FS,['p']);
     P.pool=prog(GPU_QUAD_VS,GPU_POOL_FS,['p']);
     P.blit=prog(GPU_QUAD_VS,GPU_BLIT_FS,['p']);
+    P.aa3=prog(GPU_QUAD_VS,GPU_AA3_FS,['p']);
     P.lens=prog(GPU_QUAD_VS,GPU_LENS_FS,['p']);
     P.spread=prog(GPU_QUAD_VS,GPU_SPREAD_FS,['p']);
     /* render targets */
@@ -2592,8 +2681,13 @@ const gpuRender=()=>{
       src=dst;
     }
   }else{
+    /* edge-aware 3px AA: only smooths detected alpha edges, preserving interior pixels */
+    target(gpu.tmp,BS);
+    gl.useProgram(P.aa3.p);gl.uniform1i(P.aa3.u('uA'),0);tex(0,src.t);
+    gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     target(null,BS);
-    gl.useProgram(P.blit.p);gl.uniform1i(P.blit.u('uA'),0);tex(0,src.t);
+    gl.useProgram(P.blit.p);gl.uniform1i(P.blit.u('uA'),0);tex(0,gpu.tmp.t);
     gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   }
