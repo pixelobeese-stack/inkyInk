@@ -95,7 +95,7 @@ canvas{display:block;width:100%;max-width:700px;height:auto;background:transpare
           <option value="torus">torus</option>
           <option value="cone">cone</option>
           <option value="mesh" id="meshShapeOption" disabled>imported mesh</option>
-          <option value="text" id="textShapeOption" disabled>text</option>
+          <option value="text" id="textShapeOption" disabled>letter</option>
         </select>
       </div>
     </div>
@@ -126,11 +126,11 @@ canvas{display:block;width:100%;max-width:700px;height:auto;background:transpare
   </div>
 
   <div class="section">
-    <div class="title collapsed" data-target="sec-text">text <span class="arrow">&#9662;</span></div>
+    <div class="title collapsed" data-target="sec-text">letter <span class="arrow">&#9662;</span></div>
     <div class="section-body" id="sec-text" style="display:none">
       <div class="row">
-        <label>word</label>
-        <input type="text" id="textChar" maxlength="64" style="flex:1;min-width:0;font-family:monospace,sans-serif;font-size:14px;font-weight:700;text-align:center" placeholder="HELLO WORLD">
+        <label>letter</label>
+        <input type="text" id="textChar" maxlength="1" style="flex:1;min-width:0;font-family:monospace,sans-serif;font-size:14px;font-weight:700;text-align:center" placeholder="A">
       </div>
       <div class="row">
         <label>font</label>
@@ -144,7 +144,7 @@ canvas{display:block;width:100%;max-width:700px;height:auto;background:transpare
         </select>
       </div>
       <div class="row"><label>depth</label><input type="range" id="textDepth" min="8" max="60" step="2" value="32"><span class="val" id="textDepthVal">32</span></div>
-      <div class="note">renders a letter, word, or phrase as one solid extruded shape — 9+ characters supported; texture and gradient are ignored, same as an imported mesh</div>
+      <div class="note">renders one typed letter as a solid extruded shape, in the palette color below — texture and gradient are ignored, same as an imported mesh</div>
       <div class="note" id="textMsg"></div>
     </div>
   </div>
@@ -394,29 +394,14 @@ const BLEED_MAX=.8,BLEED_BLUR=100,BLEED_REACH=160;   /* layer opacity at full bl
 const FAR=1000;          /* distance used to fake a sun (directional light) as a very far point */
 const MAX_LIGHTS=4;
 
-/* True XYZ Euler rotation about the model centre.  The same rotation order
-   is used by CPU projection and the WebGL matrix: X -> Y -> Z. */
-const rotatePoint=(x,y,z,rotX,rotY,rotZ)=>{
-  let px=x-CEN,py=y-CEN,pz=z-CEN;
-  const rx=rotX*Math.PI/180, cx=Math.cos(rx), sx=Math.sin(rx);
-  const py1=py*cx-pz*sx, pz1=py*sx+pz*cx;
-  py=py1; pz=pz1;
-  const ry=rotY*Math.PI/180, cy=Math.cos(ry), sy=Math.sin(ry);
-  const px2=px*cy+pz*sy, pz2=-px*sy+pz*cy;
-  px=px2; pz=pz2;
-  const rz=rotZ*Math.PI/180, cz=Math.cos(rz), sz=Math.sin(rz);
-  const px3=px*cz-py*sz, py3=px*sz+py*cz;
-  return{x:px3,y:py3,z:pz};
-};
-const rotateVector=(x,y,z,rotX,rotY,rotZ)=>{
-  const q=rotatePoint(CEN+x,CEN+y,CEN+z,rotX,rotY,rotZ);
-  return{x:q.x,y:q.y,z:q.z};
-};
 const project=(x,y,z,rotX,rotY,rotZ)=>{
-  const q=rotatePoint(x,y,z,rotX,rotY,rotZ);
-  /* small depth tilt preserves the existing voxel 3D presentation without
-     changing the actual rotation itself. */
-  return{x:q.x,y:q.y-q.z*.1,z:q.z};
+  let px=x-CEN,py=y-CEN,pz=z-CEN;
+  const rx=rotX*Math.PI/180,y1=py*Math.cos(rx)-pz*Math.sin(rx),z1=py*Math.sin(rx)+pz*Math.cos(rx);
+  py=y1;pz=z1;
+  const ry=rotY*Math.PI/180,x2=px*Math.cos(ry)+pz*Math.sin(ry),z2=-px*Math.sin(ry)+pz*Math.cos(ry);
+  px=x2;pz=z2;
+  const rz=rotZ*Math.PI/180,x3=px*Math.cos(rz)-py*Math.sin(rz),y3=px*Math.sin(rz)+py*Math.cos(rz);
+  return{x:x3,y:y3-pz*.1,z:pz};
 };
 
 /* shadow of a point at (x,y,z) cast by a positional light onto the ground plane */
@@ -950,18 +935,16 @@ const shadeMultiLight=(d,shaderFn,hemiFn,...args)=>{
       const c=hemiFn(d,A,...args);
       tr+=c.r;tg+=c.g;tb+=c.b;
     }else if(A.type==='sun'){
-      const ld=rotateVector(A.dir,state.rotX,state.rotY,state.rotZ);
-      const c=shaderFn(d,d.x+ld.x*FAR,d.y+ld.y*FAR,d.z+ld.z*FAR,A.lcol,A.intensity,...args);
+      const c=shaderFn(d,d.x+A.dir.x*FAR,d.y+A.dir.y*FAR,d.z+A.dir.z*FAR,A.lcol,A.intensity,...args);
       tr+=c.r;tg+=c.g;tb+=c.b;
     }else if(A.type==='point'){
-      const p=rotatePoint(A.pos.x,A.pos.y,A.pos.z,state.rotX,state.rotY,state.rotZ),dist=Math.hypot(p.x-d.x,p.y-d.y,p.z-d.z);
+      const p=A.pos,dist=Math.hypot(p.x-d.x,p.y-d.y,p.z-d.z);
       const c=shaderFn(d,p.x,p.y,p.z,A.lcol,A.intensity*pointFalloff(dist,A.range),...args);
       tr+=c.r;tg+=c.g;tb+=c.b;
     }else{
       const w=1/A.samples.length;
       for(const s of A.samples){
-        const sp=rotatePoint(s.x,s.y,s.z,state.rotX,state.rotY,state.rotZ);
-        const c=shaderFn(d,sp.x,sp.y,sp.z,A.lcol,A.intensity,...args);
+        const c=shaderFn(d,s.x,s.y,s.z,A.lcol,A.intensity,...args);
         tr+=c.r*w;tg+=c.g*w;tb+=c.b*w;
       }
     }
@@ -1596,9 +1579,8 @@ document.getElementById('meshClear').addEventListener('click',()=>{
   }
 });
 
-/* ==================== TEXT / WORD (RASTERIZE -> EXTRUDE -> VOXELS) ====================
-   Draws the typed text onto a GRID x GRID canvas with a bold rounded font, automatically
-   fitting words and longer phrases inside the mask, thresholds
+/* ==================== TEXT / LETTER (RASTERIZE -> EXTRUDE -> VOXELS) ====================
+   Draws the typed character onto a GRID x GRID canvas with a bold sans-serif font, thresholds
    the alpha channel into a flat 2D mask, then extrudes that mask along z into a solid occupancy
    grid — the same shape occToMeshDots() (built for mesh import, above) already knows how to turn
    into voxels with approximate surface normals. Single flat color only, like an imported mesh. */
@@ -1623,29 +1605,17 @@ const buildTextShape=()=>{
   const octx=off.getContext('2d');
   octx.clearRect(0,0,N,N);
   octx.fillStyle='#fff';
-  /* Fit the entire string, including spaces, into the mask.  This deliberately supports
-     long words/phrases rather than treating the field as a one-character glyph. */
-  const fontFamily={
-    rounded:'"Arial Rounded MT Bold", "Nunito", sans-serif',
-    fredoka:'"Fredoka", sans-serif',
-    nunito:'"Nunito", sans-serif',
-    quicksand:'"Quicksand", sans-serif',
-    soft:'"Trebuchet MS", "Nunito", sans-serif',
-    mono:'monospace'
-  }[state.textFont||'rounded'];
-  const weight={rounded:700,fredoka:600,nunito:800,quicksand:700,soft:700,mono:700}[state.textFont||'rounded'];
-  const maxW=N*0.94,maxH=N*0.72;
-  let fontSize=Math.round(N*0.72);
+  const fontSize=Math.round(N*0.72);
+  const fontMap={
+    rounded:'700 '+fontSize+'px "Arial Rounded MT Bold", "Nunito", sans-serif',
+    fredoka:'600 '+fontSize+'px "Fredoka", sans-serif',
+    nunito:'800 '+fontSize+'px "Nunito", sans-serif',
+    quicksand:'700 '+fontSize+'px "Quicksand", sans-serif',
+    soft:'700 '+fontSize+'px "Trebuchet MS", "Nunito", sans-serif',
+    mono:'700 '+fontSize+'px monospace'
+  };
+  octx.font=fontMap[state.textFont||'rounded'];
   octx.textAlign='center';octx.textBaseline='middle';
-  for(let i=0;i<8;i++){
-    octx.font=weight+' '+fontSize+'px '+fontFamily;
-    const m=octx.measureText(ch);
-    const width=m.width||1;
-    const next=Math.floor(Math.min(fontSize*maxW/width,fontSize*maxH/(m.actualBoundingBoxAscent+m.actualBoundingBoxDescent||fontSize)));
-    if(next>=fontSize-1) break;
-    fontSize=Math.max(8,next);
-  }
-  octx.font=weight+' '+fontSize+'px '+fontFamily;
   octx.fillText(ch,N/2,N/2);
   const img=octx.getImageData(0,0,N,N).data;
   const mask=new Uint8Array(N*N);
@@ -1688,7 +1658,7 @@ const buildTextShape=()=>{
 };
 
 textChar.addEventListener('input',()=>{
-  state.textChar=textChar.value.slice(0,64);
+  state.textChar=textChar.value.slice(0,1);
   buildTextShape();
 });
 textFont.addEventListener('change',()=>{
@@ -2291,36 +2261,8 @@ void main(){
 const GPU_GROUND_FS=GLSL_PREC+`uniform vec2 uObj,uRad,uPlane;
 uniform float uShadow,uBleed,uCaustic,uShadowSharp,uBleedSharp,uCausticSharp,uCount;
 uniform vec4 uLPos[4]; uniform vec4 uLCol[4];
-float ell(vec2 p,vec2 c,vec2 r,float power){vec2 q=(p-c)/max(r,vec2(.001));float d=length(q);return exp(-pow(d,max(.55,power)));}
-float segField(vec2 p,vec2 a,vec2 b,float width,float power){vec2 ab=b-a;float t=clamp(dot(p-a,ab)/max(dot(ab,ab),.0001),0.,1.);vec2 q=p-mix(a,b,t);float d=length(q)/max(width,.001);return exp(-pow(d,max(.55,power)));}
-void main(){
- vec2 p=vec2(gl_FragCoord.x,700.-gl_FragCoord.y); vec3 ground=vec3(0.); float shadow=0.,ca=0.;
- /* GTAO-like contact term: strong immediately beneath the projected silhouette,
-    then rapidly loses energy. This is the horizon/contact part rather than a blob. */
- float contact=ell(p,uObj,max(uRad*vec2(.92,.48),vec2(10.)),1.55+uShadowSharp*1.8);
- contact*=.72+.28*uShadowSharp;
- for(int i=0;i<4;i++){
-   if(float(i)>=uCount)break;
-   vec2 hit=uLPos[i].xy; float strength=max(0.,uLPos[i].w);
-   vec2 d=hit-uObj; float len=length(d); vec2 dir=d/max(len,.001);
-   /* the receiver starts at the contact point and extends along the actual light ray */
-   float horizonLen=min(700.,max(uRad.x*1.5,len+uRad.x*1.8));
-   vec2 end=uObj+dir*horizonLen;
-   float width=max(5.,uRad.y*(.22+.22*(1.-uShadowSharp)));
-   float sh=segField(p,uObj,end,width,1.15+uShadowSharp*2.2);
-   float farFade=1.-smoothstep(horizonLen*.42,horizonLen,length(p-uObj));
-   sh*=mix(.18,.82,farFade);
-   shadow=max(shadow,sh*strength);
-   float bl=segField(p,uObj,end,width*mix(2.1,1.25,clamp(uBleedSharp,0.,1.)),.85+uBleedSharp*1.5);
-   float cu=segField(p,uObj+dir*width*.65,end,width*mix(1.55,.85,clamp(uCausticSharp,0.,1.)),.8+uCausticSharp*1.7);
-   ca=max(ca,cu*strength);
-   ground+=uLCol[i].rgb*(bl*uBleed*.26+cu*uCaustic*.10);
- }
- shadow=max(shadow,contact*.55);
- float a=max(shadow*uShadow,max(length(ground),ca*uCaustic));
- vec3 rgb=ground*(1.-shadow*uShadow*.72)+vec3(ca*uCaustic*.055);
- gl_FragColor=vec4(clamp(rgb,0.,1.),clamp(a,0.,.92));
-}`;
+float ell(vec2 p,vec2 c,vec2 r,float soft){vec2 q=(p-c)/max(r,vec2(.001));float d=length(q);float w=max(.0001,soft);return exp(-pow(d,2.0)/(w*w));}
+void main(){vec2 p=vec2(gl_FragCoord.x,700.-gl_FragCoord.y);vec3 ground=vec3(0.);float shadow=0.,ca=0.;for(int i=0;i<4;i++){if(float(i)>=uCount)break;vec2 c=uLPos[i].xy;float strength=max(0.,uLPos[i].w);vec2 axis=normalize(c-uObj+vec2(.0001));vec2 perp=vec2(-axis.y,axis.x);float dist=length(c-uObj);vec2 sr=vec2(max(uRad.x*.72,12.)+dist*.34,max(uRad.y*.46,10.)+dist*.16);vec2 bp=sr*mix(1.9,.95,clamp(uBleedSharp,0.,1.));vec2 cp=sr*mix(1.7,.82,clamp(uCausticSharp,0.,1.));float sh=ell(p,c,sr,mix(.95,.20,clamp(uShadowSharp,0.,1.)));float bl=ell(p,c,bp,mix(1.2,.42,clamp(uBleedSharp,0.,1.)));float cu=ell(p,c+perp*sr.y*.18,cp,mix(1.25,.38,clamp(uCausticSharp,0.,1.)));shadow=max(shadow,sh*strength);ca=max(ca,cu*strength);ground+=uLCol[i].rgb*(bl*uBleed*.42+cu*uCaustic*.12);}float a=max(shadow*uShadow,max(length(ground),ca*uCaustic));float lightWash=clamp(ca*uCaustic*.30+length(ground)*.55,0.,1.);vec3 pale=mix(ground,vec3(1.),.62);vec3 rgb=ground*(1.-shadow*uShadow*.72)+pale*lightWash*(1.-shadow*.35)+vec3(ca*uCaustic*.08);gl_FragColor=vec4(clamp(rgb,0.,1.),clamp(a+lightWash*.10,0.,.92));}`;
 
 const GPU_QUAD_VS='attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
 const GPU_DOWN_FS=GLSL_PREC+`uniform sampler2D uA;uniform float uN;
@@ -2506,14 +2448,15 @@ const initGPU=()=>{
 
 /* rotation part of project(), as a column-major mat3 (project() then adds the -0.4*z tilt) */
 const gpuRotMat=()=>{
-  const ax=state.rotX*Math.PI/180,ay=state.rotY*Math.PI/180,az=state.rotZ*Math.PI/180;
-  const cx=Math.cos(ax),sx=Math.sin(ax),cy=Math.cos(ay),sy=Math.sin(ay),cz=Math.cos(az),sz=Math.sin(az);
-  /* Column-major Rz * Ry * Rx, matching rotatePoint() exactly. */
-  return new Float32Array([
-    cz*cy, sz*cy, -sy,
-    cz*sy*sx-sz*cx, sz*sy*sx+cz*cx, cy*sx,
-    cz*sy*cx+sz*sx, sz*sy*cx-cz*sx, cy*cx
-  ]);
+  const rot=(x,y,z)=>{
+    const rx=state.rotX*Math.PI/180,y1=y*Math.cos(rx)-z*Math.sin(rx),z1=y*Math.sin(rx)+z*Math.cos(rx);
+    y=y1;z=z1;
+    const ry=state.rotY*Math.PI/180,x2=x*Math.cos(ry)+z*Math.sin(ry),z2=-x*Math.sin(ry)+z*Math.cos(ry);
+    x=x2;z=z2;
+    const rz=state.rotZ*Math.PI/180,x3=x*Math.cos(rz)-y*Math.sin(rz),y3=x*Math.sin(rz)+y*Math.cos(rz);
+    return[x3,y3,z];
+  };
+  return new Float32Array([...rot(1,0,0),...rot(0,1,0),...rot(0,0,1)]);
 };
 
 /* upload the voxels: depth-sorted once (back to front), plus a shell-only list for shadow / bleed stamps */
@@ -2565,6 +2508,31 @@ const gpuRender=()=>{
   const go=state.glowOpacity,glowOn=go>.001;
   const glowL=glowOn?clamp(go*state.glowStrength/2,0,1):0;
   const causticOn=state.causticOpacity>.01,shadowOn=state.shadowOpacity>.001;
+
+  /* GPU glow pool: keep this local to gpuRender(). The CPU renderer has its own
+     pool calculation later in renderCPU(), so the GPU path must not reference
+     that CPU-only variable. */
+  let pool=null;
+  if(glowL>.001){
+    if(state.gcFor!==state.dots){
+      let sr=0,sg=0,sb=0,w=0;
+      for(const d of state.dots){
+        if(!d.surf||d.bw<.02) continue;
+        sr+=d.bsr*d.bw; sg+=d.bsg*d.bw; sb+=d.bsb*d.bw; w+=d.bw;
+      }
+      if(w>0){
+        const mx=Math.max(sr,sg,sb)||1;
+        state.gc={r:Math.round(sr*255/mx),g:Math.round(sg*255/mx),b:Math.round(sb*255/mx)};
+      }else state.gc={r:255,g:255,b:255};
+      state.gcFor=state.dots;
+    }
+    const poolCol=state.glowMatch?state.gc:hexToRgb(state.glowColor);
+    const coreCol={r:(poolCol.r*.7+255*.3)|0,g:(poolCol.g*.7+255*.3)|0,b:(poolCol.b*.7+255*.3)|0};
+    const pc=project(CEN,GROUND_Y,CEN,state.rotX,state.rotY,state.rotZ);
+    const px=cx+pc.x*SPACING, py=cy+(pc.y+18)*SPACING;
+    const pr=(state.shapeRadius*.8+state.haloSize*1.6+glowL*20)*SPACING;
+    pool={x:px,y:py,R:pr,poolCol,coreCol};
+  }
   const caustCol=state.texture?{r:255,g:255,b:255}:brightenHex(state.color,.7);
 
   /* scene target, transparent */
@@ -2597,24 +2565,14 @@ const gpuRender=()=>{
   gl.useProgram(P.blit.p);gl.uniform1i(P.blit.u('uA'),0);tex(0,gpu.scene.t);
   gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
 
-  /* 4. glow pool -- build the GPU pool locally; do not rely on the CPU renderer's pool variable. */
-  if(glowOn){
-    const pc=project(CEN,GROUND_Y,CEN,state.rotX,state.rotY,state.rotZ);
-    const poolX=cx+pc.x*SPACING, poolY=cy+(pc.y+18)*SPACING;
-    const poolR=(state.shapeRadius*.8+state.haloSize*1.6+glowL*20)*SPACING;
-    let poolCol;
-    if(state.glowMatch){
-      poolCol=state.gc||hexToRgb(state.color);
-    }else{
-      poolCol=hexToRgb(state.glowColor);
-    }
-    const coreCol={r:(poolCol.r*.7+255*.3)|0,g:(poolCol.g*.7+255*.3)|0,b:(poolCol.b*.7+255*.3)|0};
+  /* 4. glow pool */
+  if(pool){
     target(gpu.scene,BS);blendOn();quad();
     const Q=P.pool;
     gl.useProgram(Q.p);
-    gl.uniform3f(Q.u('uPC'),poolX,poolY,poolR);
-    gl.uniform3f(Q.u('uCol'),poolCol.r/255,poolCol.g/255,poolCol.b/255);
-    gl.uniform3f(Q.u('uCore'),coreCol.r/255,coreCol.g/255,coreCol.b/255);
+    gl.uniform3f(Q.u('uPC'),pool.x,pool.y,pool.R);
+    gl.uniform3f(Q.u('uCol'),pool.poolCol.r/255,pool.poolCol.g/255,pool.poolCol.b/255);
+    gl.uniform3f(Q.u('uCore'),pool.coreCol.r/255,pool.coreCol.g/255,pool.coreCol.b/255);
     gl.uniform2f(Q.u('uPk'),clamp(glowL*1.4,0,.95),clamp(glowL*1.1,0,.8));
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   }
@@ -2640,15 +2598,7 @@ const gpuRender=()=>{
       LC[i*3]=A.lcol.r/255;LC[i*3+1]=A.lcol.g/255;LC[i*3+2]=A.lcol.b/255;
       if(ty===3){LG[i*3]=A.ground.r/255;LG[i*3+1]=A.ground.g/255;LG[i*3+2]=A.ground.b/255;}
       const p=ty===0?A.apos:ty===1?A.pos:ty===2?A.dir:null;
-      if(p){
-        if(ty===2){
-          const rp=rotateVector(p.x,p.y,p.z,state.rotX,state.rotY,state.rotZ);
-          LP[i*3]=rp.x;LP[i*3+1]=rp.y;LP[i*3+2]=rp.z;
-        }else{
-          const rp=rotatePoint(p.x,p.y,p.z,state.rotX,state.rotY,state.rotZ);
-          LP[i*3]=rp.x;LP[i*3+1]=rp.y;LP[i*3+2]=rp.z;
-        }
-      }
+      if(p){LP[i*3]=p.x;LP[i*3+1]=p.y;LP[i*3+2]=p.z;}
       LZ[i]=A.sizeZ||0;
     }
     gl.uniform1f(V.u('uNL'),nl);gl.uniform1f(V.u('uRes'),state.sampleRes);
@@ -2785,60 +2735,14 @@ const renderCPU=()=>{
      Driven by both glow sliders, so raising either one makes the colour bleed brighter, wider and bolder. */
   const go=state.glowOpacity,glowOn=go>.001;
   const glowL=glowOn?clamp(go*state.glowStrength/2,0,1):0;
-  const causticOn=state.causticOpacity>.01;
-  const shadowOn=state.shadowOpacity>.001;
-  const shadowAny=shadowLights.length>0;
 
   /* Continuous ground plane fallback — smooth analytic gradients, never ground dots. */
-  const groundY=cy+(project(CEN,GROUND_Y,CEN,state.rotX,state.rotY,state.rotZ).y+18)*SPACING;
-  const baseX=cx,baseY=groundY;
+  const groundY=cy+(project(CEN,GROUND_Y,CEN,state.rotX,state.rotY,state.rotZ).y+18)*SPACING,objX=cx,objY=groundY,objRX=Math.max(24,state.shapeRadius*SPACING),objRY=Math.max(20,state.shapeRadius*.58*SPACING);
   ctx.save();ctx.globalCompositeOperation='source-over';
-  /* Directional ground receiver: each shadow is projected from the object toward the
-     ground along that light's actual ray. Low-angle lights naturally make long,
-     horizon-reaching shadows; overhead lights stay short. */
-  for(const A of shadowLights.slice(0,4)){
-    const src=A.center;
-    let rs=null;
-    if(src&&src.dir){const rd=rotateVector(src.dir.x,src.dir.y,src.dir.z,state.rotX,state.rotY,state.rotZ);rs={dir:rd,lh:src.lh};}
-    else if(src){const rp=rotatePoint(src.x,src.y,src.z,state.rotX,state.rotY,state.rotZ);rs={x:rp.x,y:rp.y,z:rp.z,lh:src.lh};}
-    const hit=rs&&rs.dir
-      ?projectShadowDir(CEN,CEN,CEN,rs.dir,GROUND_Y)
-      :rs?projectShadow(CEN,CEN,CEN,rs.x,rs.y,rs.z,GROUND_Y):null;
-    if(!hit) continue;
-    const hp=project(hit.x,GROUND_Y,hit.z,state.rotX,state.rotY,state.rotZ);
-    const ex=cx+hp.x*SPACING,ey=cy+(hp.y+18)*SPACING;
-    let dx=ex-baseX,dy=ey-baseY,len=Math.hypot(dx,dy);
-    if(len<1){dx=0;dy=1;len=1;}
-    const ux=dx/len,uy=dy/len,px=-uy,py=ux;
-    const rayLen=clamp(len,8,CANVAS_SIZE*.95);
-    const cx2=baseX+ux*rayLen*.52,cy2=baseY+uy*rayLen*.52;
-    const halfLen=Math.max(18,rayLen*.54+state.shapeRadius*SPACING*.35);
-    const halfW=Math.max(7,state.shapeRadius*SPACING*.34);
-    const sh=clamp(state.shadowOpacity*A.bright,0,.72);
-    const sharp=clamp(state.shadowSharpness,0,1);
-    if(shadowOn){
-      const grad=ctx.createLinearGradient(baseX-ux*halfLen,baseY-uy*halfLen,baseX+ux*halfLen,baseY+uy*halfLen);
-      grad.addColorStop(0,`rgba(0,0,0,${sh*(.92+.08*sharp)})`);
-      grad.addColorStop(.16,`rgba(0,0,0,${sh})`);
-      grad.addColorStop(.62,`rgba(0,0,0,${sh*.48})`);
-      grad.addColorStop(1,'rgba(0,0,0,0)');
-      ctx.save();ctx.translate(cx2,cy2);ctx.rotate(Math.atan2(uy,ux));
-      ctx.scale(1,halfW/Math.max(1,halfLen));ctx.fillStyle=grad;
-      ctx.fillRect(-halfLen,-halfLen,halfLen*2,halfLen*2);ctx.restore();
-    }
-    if(state.colorBleed>.001){
-      const c=A.lcol,br=halfLen*(1.15+(1-clamp(state.bleedSharpness,0,1))*.35),bw=halfW*(1.8+(1-clamp(state.bleedSharpness,0,1))*.7);
-      const aa=clamp(state.colorBleed*BLEED_MAX*A.bright*.22,0,.30);
-      ctx.save();ctx.translate(cx2,cy2);ctx.rotate(Math.atan2(uy,ux));
-      const g=ctx.createLinearGradient(-br,0,br,0);g.addColorStop(0,`rgba(${c.r},${c.g},${c.b},${aa*.55})`);g.addColorStop(.35,`rgba(${c.r},${c.g},${c.b},${aa})`);g.addColorStop(1,'rgba(0,0,0,0)');
-      ctx.scale(1,bw/Math.max(1,br));ctx.fillStyle=g;ctx.fillRect(-br,-br,br*2,br*2);ctx.restore();
-    }
-    if(causticOn){
-      const c=state.texture?{r:255,g:255,b:255}:brightenHex(state.color,.7),cr=halfLen*.75,cw=halfW*1.25,aa=clamp(state.causticOpacity*A.bright*.14,0,.12);
-      ctx.save();ctx.translate(baseX+ux*rayLen*.38,baseY+uy*rayLen*.38);ctx.rotate(Math.atan2(uy,ux));
-      const g=ctx.createLinearGradient(-cr,0,cr,0);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(.35,`rgba(${c.r},${c.g},${c.b},${aa})`);g.addColorStop(.58,`rgba(${c.r},${c.g},${c.b},${aa*.45})`);g.addColorStop(1,'rgba(0,0,0,0)');
-      ctx.scale(1,cw/Math.max(1,cr));ctx.fillStyle=g;ctx.fillRect(-cr,-cr,cr*2,cr*2);ctx.restore();
-    }
+  for(const A of shadowLights.slice(0,4)){const s=A.center;let sx=CEN,sz=CEN;if(s.dir){sx=CEN-s.dir.x*(state.shapeRadius+35);sz=CEN-s.dir.z*(state.shapeRadius+35);}else{sx=s.x;sz=s.z;}const q=project(sx,GROUND_Y,sz,state.rotX,state.rotY,state.rotZ),x=cx+q.x*SPACING,y=cy+(q.y+18)*SPACING;const rx=Math.max(18,objRX*(1+Math.min(2,A.gain*.35))),ry=Math.max(12,objRY*(1+Math.min(1.5,A.gain*.2)));
+    if(state.shadowOpacity>.001){const g=ctx.createRadialGradient(x,y,0,x,y,rx),sh=clamp(state.shadowOpacity*A.bright,0,.72),sharp=clamp(state.shadowSharpness,0,1);g.addColorStop(0,`rgba(0,0,0,${sh})`);g.addColorStop(Math.max(.2,.55-sharp*.25),`rgba(0,0,0,${sh*.55})`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.save();ctx.translate(x,y);ctx.scale(1,ry/rx);ctx.translate(-x,-y);ctx.fillStyle=g;ctx.fillRect(x-rx,y-rx,rx*2,rx*2);ctx.restore();}
+    if(state.colorBleed>.001){const c=A.lcol,brx=rx*(1.25+(1-clamp(state.bleedSharpness,0,1))*.8),bry=ry*(1.25+(1-clamp(state.bleedSharpness,0,1))*.8),g=ctx.createRadialGradient(x,y,0,x,y,brx),aa=clamp(state.colorBleed*BLEED_MAX*A.bright*.30,0,.35);g.addColorStop(0,`rgba(${c.r},${c.g},${c.b},${aa})`);g.addColorStop(.55,`rgba(${c.r},${c.g},${c.b},${aa*.35})`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.save();ctx.translate(x,y);ctx.scale(1,bry/brx);ctx.translate(-x,-y);ctx.fillStyle=g;ctx.fillRect(x-brx,y-brx,brx*2,brx*2);ctx.restore();}
+    if(causticOn){const c=state.texture?{r:255,g:255,b:255}:brightenHex(state.color,.7),crx=rx*(.8+(1-clamp(state.causticSharpness,0,1))*.6),cry=ry*(.8+(1-clamp(state.causticSharpness,0,1))*.6),g=ctx.createRadialGradient(x,y,0,x,y,crx),aa=clamp(state.causticOpacity*A.bright*.18,0,.16);g.addColorStop(0,`rgba(${c.r},${c.g},${c.b},${aa})`);g.addColorStop(.5,`rgba(${c.r},${c.g},${c.b},${aa*.35})`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.save();ctx.translate(x,y);ctx.scale(1,cry/crx);ctx.translate(-x,-y);ctx.fillStyle=g;ctx.fillRect(x-crx,y-crx,crx*2,crx*2);ctx.restore();}
   }
   ctx.restore();
 
@@ -2878,9 +2782,25 @@ const renderCPU=()=>{
   }
   const glowPool=glowL>.001;
 
-  /* GTAO-style ground contact is already generated by the directional receiver above.
-     Do not composite the old shadow pyramid here: that legacy pass was the source of the
-     object-outline/blob appearance and would fight the light-driven horizon shadow. */
+  if(shadowOn&&shadowAny){
+    const blurBase=SHADOW_BLUR_MIN+state.shadowBlur*(SHADOW_BLUR_MAX-SHADOW_BLUR_MIN);
+    const blurPx=SHADOW_BLUR_MIN+(blurBase-SHADOW_BLUR_MIN)*(1-clamp(state.shadowSharpness,0,1));
+    const pool=shadowPyr.compose(pyramidWeights(shadowPyr,blurPx,2.8));
+    if(glowPool){
+      /* light fills the shadow: knock the darkness out wherever the glow reaches */
+      const sx=shadowPyr.up[0].x;
+      sx.save();
+      sx.globalCompositeOperation='destination-out';
+      sx.scale(shadowPyr.scale,shadowPyr.scale);
+      roundPool(sx,poolX,poolY,poolR*1.15,{r:0,g:0,b:0},clamp(glowL*1.8,0,1));
+      sx.restore();
+    }
+    ctx.save();
+    ctx.globalAlpha=clamp(state.shadowOpacity,0,1);
+    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+    ctx.drawImage(pool,0,0,CANVAS_SIZE,CANVAS_SIZE);
+    ctx.restore();
+  }
 
   /* color bleed: each shell voxel stamps its hue at its shadow position on a small layer,
      which is blurred and laid over the ground. Kept apart from the dark shadow dots
@@ -2895,11 +2815,7 @@ const renderCPU=()=>{
       if(!d.surf||d.bw<.02) continue;
       const fr=d.bsr,fg=d.bsg,fb=d.bsb;
       for(const A of shadowLights){
-        const ss=A.center;
-        let rs=ss;
-        if(ss&&ss.dir){const rd=rotateVector(ss.dir.x,ss.dir.y,ss.dir.z,state.rotX,state.rotY,state.rotZ);rs={dir:rd,lh:ss.lh};}
-        else if(ss){const rp=rotatePoint(ss.x,ss.y,ss.z,state.rotX,state.rotY,state.rotZ);rs={x:rp.x,y:rp.y,z:rp.z,lh:ss.lh};}
-        const sh=castShadow(d.x,d.y,d.z,rs);
+        const sh=castShadow(d.x,d.y,d.z,A.center);
         if(!sh) continue;
         /* the pool fades with distance from the shape so stretched far shadows don't streak */
         const fade=Math.pow(clamp(1-Math.hypot(sh.x-CEN,sh.z-CEN)/BLEED_REACH,0,1),1.5);
