@@ -245,6 +245,21 @@ canvas{display:block;width:100%;max-width:700px;height:auto;background:transpare
   </div>
 
   <div class="section">
+    <div class="title" data-target="sec-principled">principled / stylized <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-principled">
+      <div class="row"><label>enabled</label><input type="checkbox" id="principledOn" checked></div>
+      <div class="row"><label>roughness</label><input type="range" id="prRough" min="0.04" max="1" step="0.01" value="0.32"><span class="val" id="prRoughVal">0.32</span></div>
+      <div class="row"><label>specular</label><input type="range" id="prSpec" min="0" max="1" step="0.01" value="0.50"><span class="val" id="prSpecVal">0.50</span></div>
+      <div class="row"><label>clearcoat</label><input type="range" id="prCoat" min="0" max="1" step="0.01" value="0.16"><span class="val" id="prCoatVal">0.16</span></div>
+      <div class="row"><label>coat gloss</label><input type="range" id="prCoatGloss" min="0" max="1" step="0.01" value="0.72"><span class="val" id="prCoatGlossVal">0.72</span></div>
+      <div class="row"><label>sheen</label><input type="range" id="prSheen" min="0" max="1" step="0.01" value="0.10"><span class="val" id="prSheenVal">0.10</span></div>
+      <div class="row"><label>subsurface</label><input type="range" id="prSub" min="0" max="1" step="0.01" value="0.08"><span class="val" id="prSubVal">0.08</span></div>
+      <div class="row"><label>wrap</label><input type="range" id="prWrap" min="0" max="0.5" step="0.01" value="0.18"><span class="val" id="prWrapVal">0.18</span></div>
+      <div class="note">Disney-inspired principled response: soft wrap diffuse, energy-balanced specular, fresnel, clearcoat and gentle subsurface lift. works with the existing light rig.</div>
+    </div>
+  </div>
+
+  <div class="section">
     <div class="title collapsed" data-target="sec-metal">metal <span class="arrow">&#9662;</span></div>
     <div class="section-body" id="sec-metal" style="display:none">
       <div class="row"><label>opacity</label><input type="range" id="bulletOpacity" min="0" max="1" step="0.05" value="0"><span class="val" id="bulletOpacityVal">0.00</span></div>
@@ -861,6 +876,48 @@ const phongSample=(d,lx,ly,lz,lcol,linten,base,pow,inten)=>{
   };
 };
 
+const principledSample=(d,lx,ly,lz,lcol,linten,rough,specular,coat,coatGloss,sheen,subsurface,wrap)=>{
+  const n={x:d.nx,y:d.ny,z:d.nz};
+  const l=normalize({x:lx-d.x,y:ly-d.y,z:lz-d.z});
+  const v=normalize({x:CEN-d.x,y:CEN-d.y,z:80-d.z});
+  const h=normalize({x:l.x+v.x,y:l.y+v.y,z:l.z+v.z});
+  const nl=Math.max(0,dot(n,l)),nv=Math.max(.001,dot(n,v)),nh=Math.max(0,dot(n,h)),lh=Math.max(0,dot(l,h));
+  const rr=Math.max(.04,rough),a=rr*rr,a2=a*a,den=nh*nh*(a2-1)+1;
+  const D=a2/(Math.PI*Math.max(.0001,den*den)),k=a*.5;
+  const G=(nv/(nv*(1-k)+k))*(nl/(nl*(1-k)+k));
+  const F0=.04+.04*clamp(specular,0,1),F=F0+(1-F0)*Math.pow(1-lh,5);
+  const micro=D*G*F/Math.max(.001,4*nv*Math.max(nl,.001));
+  const w=clamp(wrap,0,.5),wn=clamp((nl+w)/(1+w),0,1);
+  const fd90=.5+2*lh*lh*rr,fd=1+(fd90-1)*Math.pow(1-nl,5);
+  const diff=wn*fd*(1-F);
+  const s= sheen*Math.pow(1-lh,5)*(.5+.5*nh);
+  const sss=subsurface*(1-nl)*(1-nl)*(.55+.45*nv);
+  const cr=mixNum(.08,.35,1-clamp(coatGloss,0,1)),ca=cr*cr,ca2=ca*ca,cden=nh*nh*(ca2-1)+1;
+  const cD=ca2/(Math.PI*Math.max(.0001,cden*cden)),ck=ca*.5,cG=(nv/(nv*(1-ck)+ck))*(nl/(nl*(1-ck)+ck));
+  const cF=.04+.96*Math.pow(1-lh,5),coatSpec=cD*cG*cF/Math.max(.001,4*nv*Math.max(nl,.001))*coat;
+  const c=d.c;
+  const br=linten;
+  return {r:clamp((c.r*(diff+sss)+255*(micro+s+coatSpec))*lcol.r/255*br,0,255),
+          g:clamp((c.g*(diff+sss)+255*(micro+s+coatSpec))*lcol.g/255*br,0,255),
+          b:clamp((c.b*(diff+sss)+255*(micro+s+coatSpec))*lcol.b/255*br,0,255)};
+};
+const mixNum=(a,b,t)=>a+(b-a)*t;
+const hemiPrincipled=(d,A)=>{
+  const n={x:d.nx,y:d.ny,z:d.nz};
+  const k=.5+.5*n.y;
+  const c=hexToRgb(d.color);
+  const env={
+    r:A.ground.r+(A.sky.r-A.ground.r)*k,
+    g:A.ground.g+(A.sky.g-A.ground.g)*k,
+    b:A.ground.b+(A.sky.b-A.ground.b)*k
+  };
+  const fres=.04+.96*Math.pow(1-Math.max(0,dot(n,normalize({x:CEN-d.x,y:CEN-d.y,z:80-d.z}))),5);
+  return {
+    r:c.r/255*env.r*A.intensity*(1-.35*fres),
+    g:c.g/255*env.g*A.intensity*(1-.35*fres),
+    b:c.b/255*env.b*A.intensity*(1-.35*fres)
+  };
+};
 const metalSample=(d,lx,ly,lz,lcol,linten,base,rough)=>{
   const n={x:d.nx,y:d.ny,z:d.nz};
   const l=normalize({x:lx-d.x,y:ly-d.y,z:lz-d.z});
@@ -980,6 +1037,7 @@ const state={
   sampleRes:1,
   voxelOpacity:1.0,
   phongPower:160,phongInten:1.6,phongOpacity:1,
+  principledOn:true,prRough:.32,prSpec:.50,prCoat:.16,prCoatGloss:.72,prSheen:.10,prSub:.08,prWrap:.18,
   bulletOpacity:0,roughness:.25,
   glassOpacity:0,glassStrength:.8,
   reflOpacity:0,reflSky:.75,reflHorizon:.05,reflShadow:1,
@@ -1686,6 +1744,14 @@ bind('voxelOpacity','voxelOpacityVal','voxelOpacity',v=>v.toFixed(2));
 bind('phongPower','phongPowerVal','phongPower');
 bind('phongInten','phongIntenVal','phongInten',v=>v.toFixed(2));
 bind('phongOpacity','phongOpacityVal','phongOpacity',v=>v.toFixed(2));
+document.getElementById('principledOn').addEventListener('change',e=>{state.principledOn=e.target.checked});
+bind('prRough','prRoughVal','prRough',v=>v.toFixed(2));
+bind('prSpec','prSpecVal','prSpec',v=>v.toFixed(2));
+bind('prCoat','prCoatVal','prCoat',v=>v.toFixed(2));
+bind('prCoatGloss','prCoatGlossVal','prCoatGloss',v=>v.toFixed(2));
+bind('prSheen','prSheenVal','prSheen',v=>v.toFixed(2));
+bind('prSub','prSubVal','prSub',v=>v.toFixed(2));
+bind('prWrap','prWrapVal','prWrap',v=>v.toFixed(2));
 bind('bulletOpacity','bulletOpacityVal','bulletOpacity',v=>v.toFixed(2));
 bind('roughness','roughnessVal','roughness',v=>v.toFixed(2));
 bind('glassOpacity','glassOpacityVal','glassOpacity',v=>v.toFixed(2));
@@ -1785,6 +1851,13 @@ const SLIDER_BINDINGS=[
   ['phongPower','phongPower','phongPowerVal',v=>String(Math.round(v))],
   ['phongInten','phongInten','phongIntenVal',v=>v.toFixed(2)],
   ['phongOpacity','phongOpacity','phongOpacityVal',v=>v.toFixed(2)],
+  ['prRough','prRough','prRoughVal',v=>v.toFixed(2)],
+  ['prSpec','prSpec','prSpecVal',v=>v.toFixed(2)],
+  ['prCoat','prCoat','prCoatVal',v=>v.toFixed(2)],
+  ['prCoatGloss','prCoatGloss','prCoatGlossVal',v=>v.toFixed(2)],
+  ['prSheen','prSheen','prSheenVal',v=>v.toFixed(2)],
+  ['prSub','prSub','prSubVal',v=>v.toFixed(2)],
+  ['prWrap','prWrap','prWrapVal',v=>v.toFixed(2)],
   ['bulletOpacity','bulletOpacity','bulletOpacityVal',v=>v.toFixed(2)],
   ['roughness','roughness','roughnessVal',v=>v.toFixed(2)],
   ['glassOpacity','glassOpacity','glassOpacityVal',v=>v.toFixed(2)],
@@ -1838,6 +1911,7 @@ const serializeSettings=()=>{
     glowMatch:state.glowMatch,
     glowColor:state.glowColor,
     spreadOn:state.spreadOn,
+    principledOn:state.principledOn,
     sliders,
     lights:state.lights,
     textureKind:state.textureKind||null,
@@ -1867,6 +1941,10 @@ const restoreTextureFromDataURL=(dataURL,kind)=>new Promise((resolve,reject)=>{
 const applySettings=async(obj)=>{
   if(!obj||typeof obj!=='object') throw new Error('not a settings file');
   if(obj.shape&&SHAPES[obj.shape]){state.shape=obj.shape;shapeSelect.value=obj.shape;}
+  if(typeof obj.principledOn!=='undefined'){
+    state.principledOn=!!obj.principledOn;
+    document.getElementById('principledOn').checked=state.principledOn;
+  }
   if(obj.sliders){
     for(const [id,prop,vid,fmt] of SLIDER_BINDINGS){
       if(!(prop in obj.sliders)) continue;
@@ -2056,6 +2134,7 @@ uniform vec3 uLP[8];      /* area centre / point position / sun direction */
 uniform float uLZ[8];     /* area sizeZ */
 uniform float uPO,uMO,uGO,uGlO;
 uniform float uPhongPow,uPhongInten,uRough,uGlassStr,uGlowK,uGlowMatch;
+uniform float uPrOn,uPrRough,uPrSpec,uPrCoat,uPrCoatGloss,uPrSheen,uPrSub,uPrWrap;
 uniform float uFloorP,uFloorM,uFog,uBri,uCon;
 uniform vec3 uGlowCol;
 uniform float uRO,uRSky,uRHor,uRSh;
@@ -2087,12 +2166,63 @@ float pf(float dist,float range){float q=clamp(dist/max(1.,range),0.,1.);float f
 
 vec3 mats(vec3 d,vec3 n,vec3 c,vec3 v,vec3 lp,vec3 lc,float li){
   vec3 res=vec3(0.);
-  vec3 l=normalize(lp-d);vec3 h=normalize(l+v);
-  float nl=max(0.,dot(n,l)),nh=max(0.,dot(n,h));
-  if(uPO>.001){
+  vec3 l=normalize(lp-d);
+  vec3 h=normalize(l+v);
+  float nl=max(0.,dot(n,l));
+  float nv=max(.001,dot(n,v));
+  float nh=max(0.,dot(n,h));
+  float lh=max(0.,dot(l,h));
+
+  /* Disney-inspired principled BRDF:
+     - wrapped diffuse gives the soft illustrated roll-off
+     - Schlick Fresnel keeps highlights physically plausible
+     - GGX-like microfacet specular gives broad, clean plastic highlights
+     - clearcoat creates the characteristic polished top layer
+     - sheen and a small subsurface-style wrap lift prevent dead black terminators */
+  if(uPrOn>.5){
+    float rough=clamp(uPrRough,.04,1.);
+    float alpha=max(.02,rough*rough);
+    float a2=alpha*alpha;
+    float den=(nh*nh)*(a2-1.)+1.;
+    float D=a2/max(.0001,3.14159265*den*den);
+    float k=alpha*.5;
+    float Gv=nv/(nv*(1.-k)+k);
+    float Gl=nl/(nl*(1.-k)+k);
+    float G=Gv*Gl;
+    float f0=mix(.04,.08,clamp(uPrSpec,0.,1.));
+    float F=f0+(1.-f0)*pow(1.-lh,5.);
+    float spec=D*G*F/max(.001,4.*nv*max(nl,.001));
+
+    float wrap=clamp(uPrWrap,0.,.5);
+    float wrapN=clamp((nl+wrap)/(1.+wrap),0.,1.);
+    float fd90=.5+2.*lh*lh*rough;
+    float Fd=1.+(fd90-1.)*pow(1.-nl,5.);
+    float diffuse=wrapN*Fd;
+
+    float sheen=uPrSheen*pow(1.-lh,5.)*(.5+.5*nh);
+    float sss=uPrSub*(1.-nl)*(1.-nl)*(.55+.45*nv);
+
+    vec3 diffCol=c*(diffuse*(1.-F)*(.98+.02*(1.-uPrCoat))+sss);
+    vec3 specCol=vec3(spec);
+    vec3 sheenCol=vec3(.8,.65,.55)*sheen;
+
+    /* clearcoat uses a much sharper GGX lobe */
+    float coatR=mix(.08,.35,1.-clamp(uPrCoatGloss,0.,1.));
+    float ca=coatR*coatR,ca2=ca*ca;
+    float cd=(nh*nh)*(ca2-1.)+1.;
+    float cD=ca2/max(.0001,3.14159265*cd*cd);
+    float ck=ca*.5;
+    float cG=(nv/(nv*(1.-ck)+ck))*(nl/(nl*(1.-ck)+ck));
+    float cF=.04+.96*pow(1.-lh,5.);
+    float coatSpec=cD*cG*cF/max(.001,4.*nv*max(nl,.001))*uPrCoat;
+
+    res += (diffCol + specCol + sheenCol + vec3(coatSpec))*lc*li;
+  }else if(uPO>.001){
     float diff=max(uFloorP,nl),spec=pow(nh,uPhongPow);
     res+=uPO*clamp((c*diff+spec*uPhongInten)*lc*li,0.,1.);
   }
+
+  /* Existing explicit material layers remain available on top. */
   if(uMO>.001){
     float diff=max(uFloorM,nl)*(1.-uRough),spec=pow(nh,max(10.,90./(uRough+.15)));
     res+=uMO*clamp((c*diff+vec3(220.,215.,210.)/255.*spec)*lc*li,0.,1.);
@@ -2262,7 +2392,7 @@ const GPU_GROUND_FS=GLSL_PREC+`uniform vec2 uObj,uRad,uPlane;
 uniform float uShadow,uBleed,uCaustic,uShadowSharp,uBleedSharp,uCausticSharp,uCount;
 uniform vec4 uLPos[4]; uniform vec4 uLCol[4];
 float ell(vec2 p,vec2 c,vec2 r,float soft){vec2 q=(p-c)/max(r,vec2(.001));float d=length(q);float w=max(.0001,soft);return exp(-pow(d,2.0)/(w*w));}
-void main(){vec2 p=vec2(gl_FragCoord.x,700.-gl_FragCoord.y);vec3 ground=vec3(0.);float shadow=0.,ca=0.;for(int i=0;i<4;i++){if(float(i)>=uCount)break;vec2 c=uLPos[i].xy;float strength=max(0.,uLPos[i].w);vec2 axis=normalize(c-uObj+vec2(.0001));vec2 perp=vec2(-axis.y,axis.x);float dist=length(c-uObj);vec2 sr=vec2(max(uRad.x*.72,12.)+dist*.34,max(uRad.y*.46,10.)+dist*.16);vec2 bp=sr*mix(1.9,.95,clamp(uBleedSharp,0.,1.));vec2 cp=sr*mix(1.7,.82,clamp(uCausticSharp,0.,1.));float sh=ell(p,c,sr,mix(.95,.20,clamp(uShadowSharp,0.,1.)));float bl=ell(p,c,bp,mix(1.2,.42,clamp(uBleedSharp,0.,1.)));float cu=ell(p,c+perp*sr.y*.18,cp,mix(1.25,.38,clamp(uCausticSharp,0.,1.)));shadow=max(shadow,sh*strength);ca=max(ca,cu*strength);ground+=uLCol[i].rgb*(bl*uBleed*.42+cu*uCaustic*.12);}float a=max(shadow*uShadow,max(length(ground),ca*uCaustic));float lightWash=clamp(ca*uCaustic*.30+length(ground)*.55,0.,1.);vec3 pale=mix(ground,vec3(1.),.62);vec3 rgb=ground*(1.-shadow*uShadow*.72)+pale*lightWash*(1.-shadow*.35)+vec3(ca*uCaustic*.08);gl_FragColor=vec4(clamp(rgb,0.,1.),clamp(a+lightWash*.10,0.,.92));}`;
+void main(){vec2 p=vec2(gl_FragCoord.x,700.-gl_FragCoord.y);vec3 ground=vec3(0.);float shadow=0.,ca=0.;for(int i=0;i<4;i++){if(float(i)>=uCount)break;vec2 c=uLPos[i].xy;float strength=max(0.,uLPos[i].w);vec2 axis=normalize(c-uObj+vec2(.0001));vec2 perp=vec2(-axis.y,axis.x);float dist=length(c-uObj);vec2 sr=vec2(max(uRad.x*.72,12.)+dist*.34,max(uRad.y*.46,10.)+dist*.16);vec2 bp=sr*mix(1.9,.95,clamp(uBleedSharp,0.,1.));vec2 cp=sr*mix(1.7,.82,clamp(uCausticSharp,0.,1.));float sh=ell(p,c,sr,mix(.95,.20,clamp(uShadowSharp,0.,1.)));float bl=ell(p,c,bp,mix(1.2,.42,clamp(uBleedSharp,0.,1.)));float cu=ell(p,c+perp*sr.y*.18,cp,mix(1.25,.38,clamp(uCausticSharp,0.,1.)));shadow=max(shadow,sh*strength);ca=max(ca,cu*strength);ground+=uLCol[i].rgb*(bl*uBleed*.42+cu*uCaustic*.12);}float a=max(shadow*uShadow,max(length(ground),ca*uCaustic));vec3 rgb=ground*(1.-shadow*uShadow*.72)+vec3(ca*uCaustic*.08);gl_FragColor=vec4(clamp(rgb,0.,1.),clamp(a,0.,.92));}`;
 
 const GPU_QUAD_VS='attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
 const GPU_DOWN_FS=GLSL_PREC+`uniform sampler2D uA;uniform float uN;
@@ -2609,6 +2739,9 @@ const gpuRender=()=>{
     gl.uniform1f(V.u('uPO'),state.phongOpacity);gl.uniform1f(V.u('uMO'),state.bulletOpacity);
     gl.uniform1f(V.u('uGO'),state.glassOpacity);gl.uniform1f(V.u('uGlO'),go);
     gl.uniform1f(V.u('uPhongPow'),state.phongPower);gl.uniform1f(V.u('uPhongInten'),state.phongInten);
+    gl.uniform1f(V.u('uPrOn'),state.principledOn?1:0);gl.uniform1f(V.u('uPrRough'),state.prRough);
+    gl.uniform1f(V.u('uPrSpec'),state.prSpec);gl.uniform1f(V.u('uPrCoat'),state.prCoat);gl.uniform1f(V.u('uPrCoatGloss'),state.prCoatGloss);
+    gl.uniform1f(V.u('uPrSheen'),state.prSheen);gl.uniform1f(V.u('uPrSub'),state.prSub);gl.uniform1f(V.u('uPrWrap'),state.prWrap);
     gl.uniform1f(V.u('uRough'),state.roughness);gl.uniform1f(V.u('uGlassStr'),state.glassStrength);
     gl.uniform1f(V.u('uGlowK'),state.glowStrength);gl.uniform1f(V.u('uGlowMatch'),state.glowMatch?1:0);
     const gc=hexToRgb(state.glowColor);gl.uniform3f(V.u('uGlowCol'),gc.r/255,gc.g/255,gc.b/255);
@@ -2852,7 +2985,10 @@ const renderCPU=()=>{
   for(let i=0;i<list.length;i++){
     const d=list[i],c=d.c;
     let r=0,gr=0,b=0;
-    if(po>.001){
+    if(state.principledOn){
+      const p=shadeMultiLight(d,(dd,lx,ly,lz,lc,li)=>principledSample(dd,lx,ly,lz,lc,li,state.prRough,state.prSpec,state.prCoat,state.prCoatGloss,state.prSheen,state.prSub,state.prWrap),hemiPrincipled,d.color,0,0);
+      r+=p.r;gr+=p.g;b+=p.b;
+    }else if(po>.001){
       const p=shadeMultiLight(d,phongSample,hemiPhong,d.color,state.phongPower,state.phongInten);
       r+=p.r*po;gr+=p.g*po;b+=p.b*po;
     }
