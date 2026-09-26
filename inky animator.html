@@ -1,0 +1,3460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>inkyMaker</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&family=Quicksand:wght@400;500;600;700&display=swap');
+:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#fff;color:#000;font-family:monospace,sans-serif;font-weight:300;padding:8px;-webkit-text-size-adjust:100%}
+canvas{display:block;width:100%;max-width:700px;height:auto;background:transparent;margin-bottom:8px}
+.controls{max-width:700px}
+.section{margin-bottom:6px}
+.title{font-size:11px;font-weight:500;text-transform:lowercase;margin-bottom:3px;padding-bottom:2px;border-bottom:1px solid #000;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between}
+.title .arrow{font-size:10px;transition:transform .15s}
+.title.collapsed .arrow{transform:rotate(-90deg)}
+.title.collapsed + .section-body{display:none}
+.row{display:flex;align-items:center;gap:4px;margin-bottom:2px;font-size:10px;font-weight:300}
+.row label{width:62px;flex-shrink:0;font-weight:300}
+.row input[type="range"]{flex:1;height:16px;min-width:0}
+.row input[type="color"]{width:24px;height:16px;border:1px solid #000;background:none;cursor:pointer;padding:0}
+.row select{flex:1;font-family:monospace,sans-serif;font-size:10px;font-weight:300;padding:1px 2px}
+.row input[type="checkbox"]{cursor:pointer;width:12px;height:12px}
+.row button{font-family:monospace,sans-serif;font-size:10px;font-weight:300;border:1px solid #000;background:#fff;color:#000;cursor:pointer;padding:1px 6px}
+.row button:hover{background:#000;color:#fff}
+.row button:disabled{opacity:.35;cursor:default;background:#fff;color:#000}
+.val{width:32px;text-align:right;font-size:9px;font-weight:300}
+.palette{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.swatch{
+  width:18px;
+  height:18px;
+  border:1px solid #000;
+  cursor:pointer;
+  border-radius:50%;
+  transition:transform .1s
+}
+.swatch:hover{transform:scale(1.1)}
+.swatch.selected{
+  outline:2px solid #000;
+  outline-offset:1px;
+  transform:scale(1.15)
+}
+.render-progress{display:none;height:8px;margin:7px 0 2px;background:#e9e9e9;border-radius:999px;overflow:hidden}.render-progress.on{display:block}.render-progress-bar{height:100%;width:0%;background:#111;transition:width .12s ease}.render-progress-text{font-size:11px;margin-top:3px;text-align:center;min-height:13px}.note{font-size:9px;color:#666;margin-top:2px;font-weight:300}
+.light-block{border:1px solid #ddd;padding:4px;margin-bottom:4px}
+.light-block.off{opacity:.55}
+.light-header{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:3px;font-size:10px;font-weight:500}
+.light-header label{display:flex;align-items:center;gap:3px;cursor:pointer;font-weight:500;width:auto;flex:1;min-width:0}
+.light-tools{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.light-tools .cl{font-size:9px;font-weight:300}
+.light-tools input[type="color"]{width:24px;height:16px;border:1px solid #000;background:none;cursor:pointer;padding:0}
+.light-del{font-family:monospace,sans-serif;font-size:11px;line-height:14px;border:1px solid #000;background:#fff;color:#000;cursor:pointer;padding:0 5px}
+.light-del:hover{background:#000;color:#fff}
+.light-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 8px}
+.light-grid .row label{width:44px}
+.light-foot{display:flex;align-items:center;gap:4px;font-size:9px;margin-top:2px}
+.light-foot label{display:flex;align-items:center;gap:3px;cursor:pointer;font-weight:300}
+.light-foot input[type="checkbox"]{width:12px;height:12px;cursor:pointer}
+@media(max-width:420px){
+  .light-grid{grid-template-columns:1fr}
+  .row label{width:54px}
+}
+</style>
+</head>
+<body>
+
+<canvas id="mainCanvas" width="700" height="700"></canvas>
+<div class="controls">
+
+  <div class="section">
+    <div class="row">
+      <label>save</label>
+      <button id="saveBtn">download png</button>
+      <button id="exportGifBtn" type="button">export gif</button>
+    </div>
+    <div class="render-progress" id="renderProgress"><div class="render-progress-bar" id="renderProgressBar"></div></div><div class="render-progress-text" id="renderProgressText"></div><div class="note" id="saveMsg"></div>
+    <div class="note" id="gpuMsg"></div>
+    <div class="row" style="margin-top:4px">
+      <label>settings</label>
+      <button id="settingsExport">export json</button>
+      <button id="settingsImportBtn">import json</button>
+      <input type="file" id="settingsImportFile" accept="application/json,.json" style="display:none">
+    </div>
+    <div class="note" id="settingsMsg"></div>
+  </div>
+
+  <div class="section">
+    <div class="title" data-target="sec-shape">shape <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-shape">
+      <div class="row">
+        <label>form</label>
+        <select id="shapeSelect">
+          <option value="sphere">sphere</option>
+          <option value="cube">cube</option>
+          <option value="torus">torus</option>
+          <option value="cone">cone</option>
+          <option value="mesh" id="meshShapeOption" disabled>imported mesh</option>
+          <option value="text" id="textShapeOption" disabled>letter</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-camera">camera <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-camera" style="display:none">
+      <div class="row"><label>rot X</label><input type="range" id="camRotX" min="0" max="360" step="1" value="192"><span class="val" id="camRotXVal">192</span></div>
+      <div class="row"><label>rot Y</label><input type="range" id="camRotY" min="0" max="360" step="1" value="85"><span class="val" id="camRotYVal">85</span></div>
+      <div class="row"><label>rot Z</label><input type="range" id="camRotZ" min="0" max="360" step="1" value="0"><span class="val" id="camRotZVal">0</span></div>
+      <div class="note">rotates the whole scene — typing a letter automatically faces the camera at its front; drag these to look from anywhere</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-mesh">import mesh (stl / obj) <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-mesh" style="display:none">
+      <div class="row">
+        <label>file</label>
+        <input type="file" id="meshInput" accept=".stl,.obj,.mtl" style="flex:1;min-width:0;font-family:monospace,sans-serif;font-size:10px;font-weight:300">
+        <button id="meshClear">clear</button>
+      </div>
+      <div class="row"><label>z is up</label><input type="checkbox" id="meshZUp"></div>
+      <div style="border-top:1px solid #ddd;margin-top:6px;padding-top:6px">
+        <div class="row"><label>file name</label><input type="text" id="animName" value="model" placeholder="model" style="flex:1;min-width:0;font-family:monospace,sans-serif;font-size:10px;font-weight:300"></div>
+        <div class="row"><label>frames</label><button id="animAddFrame" type="button">add frame</button><button id="animRemoveFrame" type="button">remove</button><button id="animClearFrames" type="button">clear</button><input type="file" id="animFrameFiles" accept=".obj,.mtl" multiple style="display:none"></div>
+        <select id="animFrameList" size="5" style="width:100%;margin-top:4px;font-family:monospace,sans-serif;font-size:10px;font-weight:300;background:#fff;border:1px solid #ccc;box-sizing:border-box"></select>
+        <div class="row"><label>max frames</label><input type="number" id="animMax" min="1" max="9999" value="1" style="width:72px;font-family:monospace,sans-serif;font-size:10px;font-weight:300"><button id="animAddFiles" type="button">select folder</button><input type="file" id="animFiles" webkitdirectory directory multiple style="display:none"></div>
+        <div class="note">add each frame individually by selecting its OBJ, or select its OBJ + MTL together. The list stores the selected files until the page is closed.</div>
+      </div>
+      <div class="row"><label>animation</label><button id="animPlay" type="button">play</button><button id="animPrev" type="button">prev</button><button id="animNext" type="button">next</button></div>
+      <div class="row"><label>fps</label><input type="range" id="animFps" min="1" max="60" step="1" value="12"><span class="val" id="animFpsVal">12</span></div>
+      <div class="row"><label>loop</label><input type="checkbox" id="animLoop" checked></div>
+      <div class="row"><label>frame</label><input type="range" id="animFrame" min="0" max="0" step="1" value="0"><span class="val" id="animFrameVal">0 / 0</span></div>
+      <div class="note">samples points directly off the mesh's real triangles, scaled to fit, in a single flat color by default; an optional MTL can supply per-material colours — texture/gradient maps are ignored for imported meshes. works on open/non-watertight meshes too, since there's no inside/outside test. "z is up" rotates models exported with z as the vertical axis (common for stl). very dense meshes can take a moment to sample</div>
+      <div class="note" id="meshMsg"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-text">letter <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-text" style="display:none">
+      <div class="row">
+        <label>letter</label>
+        <input type="text" id="textChar" maxlength="1" style="flex:1;min-width:0;font-family:monospace,sans-serif;font-size:14px;font-weight:700;text-align:center" placeholder="A">
+      </div>
+      <div class="row">
+        <label>font</label>
+        <select id="textFont">
+          <option value="rounded">rounded</option>
+          <option value="fredoka">fredoka</option>
+          <option value="nunito">nunito</option>
+          <option value="quicksand">quicksand</option>
+          <option value="soft">soft sans</option>
+          <option value="mono">monospace</option>
+        </select>
+      </div>
+      <div class="row"><label>depth</label><input type="range" id="textDepth" min="8" max="60" step="2" value="32"><span class="val" id="textDepthVal">32</span></div>
+      <div class="note">renders one typed letter as a solid extruded shape, in the palette color below — texture and gradient are ignored, same as an imported mesh</div>
+      <div class="note" id="textMsg"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title" data-target="sec-texture">texture map <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-texture">
+      <div class="row">
+        <label>image</label>
+        <input type="file" id="texInput" accept="image/png, image/jpeg" style="flex:1;min-width:0;font-family:monospace,sans-serif;font-size:10px;font-weight:300">
+        <button id="texClear">clear</button>
+      </div>
+      <div class="note">png / jpg — auto uv-mapped per shape</div>
+      <div class="note" id="texInfo"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-gradient">gradient texture <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-gradient" style="display:none">
+      <div class="row">
+        <label>type</label>
+        <select id="gradType">
+          <option value="linear">linear</option>
+          <option value="radial">radial</option>
+          <option value="angular">angular</option>
+        </select>
+      </div>
+      <div class="row" id="gradAngleRow">
+        <label>angle</label><input type="range" id="gradAngle" min="0" max="360" step="1" value="0"><span class="val" id="gradAngleVal">0</span>
+      </div>
+      <div id="gradStops"></div>
+      <div class="row">
+        <label>add</label>
+        <button id="gradAddStop">+ add color</button>
+        <button id="gradApply">apply</button>
+      </div>
+      <div class="note" id="gradNote">multi-color gradient, mapped like an uploaded texture — same uv mapping per shape</div>
+    </div>
+  </div>
+
+  <div class="palette" id="mainPalette"></div>
+
+  <div class="section">
+    <div class="title" data-target="sec-voxel">opacity <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-voxel">
+      <div class="row"><label>opacity</label><input type="range" id="voxelOpacity" min="0" max="1" step="0.05" value="1.0"><span class="val" id="voxelOpacityVal">1.00</span></div>
+      <div class="row"><label>front</label><input type="range" id="frontOpacity" min="0" max="1" step="0.05" value="1.0"><span class="val" id="frontOpacityVal">1.00</span></div>
+      <div class="row"><label>back</label><input type="range" id="backOpacity" min="0" max="1" step="0.05" value="1.0"><span class="val" id="backOpacityVal">1.00</span></div>
+      <div class="row"><label>split</label><input type="range" id="layerSplit" min="-120" max="120" step="1" value="0"><span class="val" id="layerSplitVal">0</span></div>
+      <div class="note">the object is cut into a front layer and a back layer at the split depth. each layer is flattened solid, then made transparent on its own (front over back), and the pair is finally faded by opacity. front 0.3 + back 1 = a see-through shell over a solid core</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title" data-target="sec-lights">lights <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-lights">
+      <div class="row"><label>samples</label>
+        <select id="sampleRes">
+          <option value="2">2 x 2</option>
+          <option value="1" selected>1 x 1 (fastest)</option>
+          <option value="3">3 x 3</option>
+          <option value="4">4 x 4</option>
+        </select>
+      </div>
+      <div class="note">higher = softer shadows from area lights and soft suns, slower render</div>
+      <div class="row"><label>preset</label>
+        <select id="lightPreset">
+          <option value="">choose a rig…</option>
+          <option value="original">original</option>
+          <option value="studio">studio (key / fill / rim)</option>
+          <option value="sunsky">sun + sky</option>
+          <option value="sunset">sunset</option>
+          <option value="neon">neon</option>
+        </select>
+      </div>
+      <div id="lightsContainer"></div>
+      <div class="row"><label>add</label>
+        <select id="addType">
+          <option value="point">point</option>
+          <option value="sun">sun</option>
+          <option value="hemi">hemisphere</option>
+          <option value="area">area</option>
+        </select>
+        <button id="addLight">+ add light</button>
+      </div>
+      <div class="note" id="lightNote"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-phong">phong <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-phong" style="display:none">
+      <div class="row"><label>sharpness</label><input type="range" id="phongPower" min="40" max="300" value="160"><span class="val" id="phongPowerVal">160</span></div>
+      <div class="row"><label>brightness</label><input type="range" id="phongInten" min="0" max="3" step="0.1" value="1.6"><span class="val" id="phongIntenVal">1.60</span></div>
+      <div class="row"><label>opacity</label><input type="range" id="phongOpacity" min="0" max="1" step="0.05" value="1.0"><span class="val" id="phongOpacityVal">1.00</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title" data-target="sec-principled">principled / stylized <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-principled">
+      <div class="row"><label>enabled</label><input type="checkbox" id="principledOn" checked></div>
+      <div class="row"><label>roughness</label><input type="range" id="prRough" min="0.04" max="1" step="0.01" value="0.32"><span class="val" id="prRoughVal">0.32</span></div>
+      <div class="row"><label>specular</label><input type="range" id="prSpec" min="0" max="1" step="0.01" value="0.50"><span class="val" id="prSpecVal">0.50</span></div>
+      <div class="row"><label>clearcoat</label><input type="range" id="prCoat" min="0" max="1" step="0.01" value="0.16"><span class="val" id="prCoatVal">0.16</span></div>
+      <div class="row"><label>coat gloss</label><input type="range" id="prCoatGloss" min="0" max="1" step="0.01" value="0.72"><span class="val" id="prCoatGlossVal">0.72</span></div>
+      <div class="row"><label>sheen</label><input type="range" id="prSheen" min="0" max="1" step="0.01" value="0.10"><span class="val" id="prSheenVal">0.10</span></div>
+      <div class="row"><label>subsurface</label><input type="range" id="prSub" min="0" max="1" step="0.01" value="0.08"><span class="val" id="prSubVal">0.08</span></div>
+      <div class="row"><label>wrap</label><input type="range" id="prWrap" min="0" max="0.5" step="0.01" value="0.18"><span class="val" id="prWrapVal">0.18</span></div>
+      <div class="note">Disney-inspired principled response: soft wrap diffuse, energy-balanced specular, fresnel, clearcoat and gentle subsurface lift. works with the existing light rig.</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-metal">metal <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-metal" style="display:none">
+      <div class="row"><label>opacity</label><input type="range" id="bulletOpacity" min="0" max="1" step="0.05" value="0"><span class="val" id="bulletOpacityVal">0.00</span></div>
+      <div class="row"><label>roughness</label><input type="range" id="roughness" min="0" max="0.6" step="0.01" value="0.25"><span class="val" id="roughnessVal">0.25</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-glass">glass <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-glass" style="display:none">
+      <div class="row"><label>opacity</label><input type="range" id="glassOpacity" min="0" max="1" step="0.05" value="0"><span class="val" id="glassOpacityVal">0.00</span></div>
+      <div class="row"><label>strength</label><input type="range" id="glassStrength" min="0" max="1.5" step="0.05" value="0.8"><span class="val" id="glassStrengthVal">0.80</span></div>
+      <div class="note">surface fresnel sheen</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-chrome">chrome reflection <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-chrome" style="display:none">
+      <div class="row"><label>opacity</label><input type="range" id="reflOpacity" min="0" max="1" step="0.05" value="0"><span class="val" id="reflOpacityVal">0.00</span></div>
+      <div class="row"><label>sky dark</label><input type="range" id="reflSky" min="0" max="1" step="0.05" value="0.75"><span class="val" id="reflSkyVal">0.75</span></div>
+      <div class="row"><label>horizon</label><input type="range" id="reflHorizon" min="0" max="1" step="0.01" value="0.05"><span class="val" id="reflHorizonVal">0.05</span></div>
+      <div class="row"><label>shadows</label><input type="range" id="reflShadow" min="0" max="1" step="0.05" value="1"><span class="val" id="reflShadowVal">1.00</span></div>
+      <div class="note">mirror finish: the object reflects a dark sky above a hard horizon and the white ground below, including the shadow, colour bleed, glow and caustic pixels lying on it. sky dark = how dark the top is, horizon = softness of the line, shadows = how much of the ground marks are reflected. gpu renderer only</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-glow">glow <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-glow" style="display:none">
+      <div class="row"><label>opacity</label><input type="range" id="glowOpacity" min="0" max="1" step="0.05" value="0"><span class="val" id="glowOpacityVal">0.00</span></div>
+      <div class="row"><label>glow</label><input type="range" id="glowStrength" min="0" max="3" step="0.05" value="1.2"><span class="val" id="glowStrengthVal">1.20</span></div>
+      <div class="row"><label>color</label><input type="checkbox" id="glowMatch" checked><span style="font-size:9px">match material</span><input type="color" id="glowColor" value="#ffb347"></div>
+      <div class="row"><label>spread</label><input type="range" id="haloSize" min="8" max="320" step="4" value="96"><span class="val" id="haloSizeVal">96</span></div>
+      <div class="note">self-lit emission, unaffected by lights. throws a round pool of coloured light on the ground that fills the shadows in. color = match the object or pick your own (white/gray/black objects glow white unless you pick one). spread sets how far it reaches</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-caustic">caustic <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-caustic" style="display:none">
+      <div class="row"><label>enabled</label><input type="checkbox" id="causticEnabled" checked></div>
+      <div class="row"><label>sharpness</label><input type="range" id="causticSharpness" min="0" max="1" step="0.05" value="0.50"><span class="val" id="causticSharpnessVal">0.50</span></div>
+      <div class="note">sharper = tighter, cleaner caustic pattern; this layer is kept outside the final post filter</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-shadow">shadow <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-shadow" style="display:none">
+      <div class="row"><label>opacity</label><input type="range" id="shadowOpacity" min="0" max="1" step="0.05" value="0.3"><span class="val" id="shadowOpacityVal">0.30</span></div>
+      <div class="row"><label>blur</label><input type="range" id="shadowBlur" min="0" max="1" step="0.05" value="0.5"><span class="val" id="shadowBlurVal">0.50</span></div>
+      <div class="row"><label>sharpness</label><input type="range" id="shadowSharpness" min="0" max="1" step="0.05" value="0.50"><span class="val" id="shadowSharpnessVal">0.50</span></div>
+      <div class="note">sharpness tightens the shadow edge independently; this layer is kept outside the final post filter</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-bleed">color bleed <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-bleed" style="display:none">
+      <div class="row"><label>amount</label><input type="range" id="colorBleed" min="0" max="1" step="0.05" value="0.4"><span class="val" id="colorBleedVal">0.40</span></div>
+      <div class="row"><label>sharpness</label><input type="range" id="bleedSharpness" min="0" max="1" step="0.05" value="0.50"><span class="val" id="bleedSharpnessVal">0.50</span></div>
+      <div class="note">sharpness tightens the colour pool independently; this layer is kept outside the final post filter</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-fog">shadow fog <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-fog" style="display:none">
+      <div class="row"><label>fog</label><input type="range" id="fogAmount" min="0" max="1" step="0.05" value="0.35"><span class="val" id="fogAmountVal">0.35</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-lens">lens <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-lens" style="display:none">
+      <div class="row"><label>bend</label><input type="range" id="lensBend" min="-1" max="1" step="0.05" value="0"><span class="val" id="lensBendVal">0.00</span></div>
+      <div class="row"><label>dispersion</label><input type="range" id="lensDisp" min="0" max="1" step="0.05" value="0"><span class="val" id="lensDispVal">0.00</span></div>
+      <div class="note">light bend: the front surface refracts whatever sits behind it — the back layer, the ground, the shadow. + = convex lens (magnifies), − = concave (shrinks). dispersion splits red / green / blue for a prismatic fringe. set front opacity to 0 for a clear glass lens. gpu renderer only</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-postfx">post fx <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-postfx" style="display:none">
+      <div class="row"><label>brightness</label><input type="range" id="postBrightness" min="0" max="2" step="0.05" value="1.0"><span class="val" id="postBrightnessVal">1.00</span></div>
+      <div class="row"><label>contrast</label><input type="range" id="postContrast" min="0" max="2" step="0.05" value="1.0"><span class="val" id="postContrastVal">1.00</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="title collapsed" data-target="sec-spread">spread <span class="arrow">&#9662;</span></div>
+    <div class="section-body" id="sec-spread" style="display:none">
+      <div class="row"><label>enabled</label><input type="checkbox" id="spreadOn"></div>
+      <div class="row"><label>amount x</label><input type="range" id="spreadX" min="0" max="60" step="1" value="8"><span class="val" id="spreadXVal">8</span></div>
+      <div class="row"><label>amount y</label><input type="range" id="spreadY" min="0" max="60" step="1" value="8"><span class="val" id="spreadYVal">8</span></div>
+      <div class="row"><label>passes</label><input type="range" id="spreadPasses" min="1" max="8" step="1" value="1"><span class="val" id="spreadPassesVal">1</span></div>
+      <div class="row"><label>seed</label><input type="range" id="spreadSeed" min="1" max="100" step="1" value="1"><span class="val" id="spreadSeedVal">1</span></div>
+      <div class="note">gimp-style spread (filters &gt; noise &gt; spread): every pixel is replaced by a random neighbour within amount x / y pixels, so edges dissolve into grain. more passes re-scatter the result and it melts into a soft spread blur. runs last, so it is included in exports</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+<script>
+(function(){
+const GRID=256,LAYERS=256,DOT_RADIUS=1.0,SPACING=0.9;
+const SURFACE_PITCH=1.0; /* target spacing between dots sampled directly off a true surface (mesh, or procedural shape) */
+const CANVAS_SIZE=700,GROUND_Y=100,CEN=GRID/2,MAX_DEPTH=GRID;
+const FOG_COLOR={r:30,g:30,b:35};
+const MS_PAINT_COLORS=[
+  '#000000','#7F7F7F','#880015','#ED1C24','#FF7F27','#FFF200','#22B14C','#00A2E8','#3F48CC','#A349A4',
+  '#FFFFFF','#C3C3C3','#B97A57','#FFAEC9','#404040','#B5B5B5','#B97A57','#F4CCCC','#FFC90E','#EFE4B0',
+  '#B5E61D','#99D9EA','#7092BE','#C8BFE7','#E5E5E5','#D9D2E9','#EAD1DC','#FCE5CD'
+];
+
+const brightenHex=(h,a=.7)=>{
+  const c=h.replace('#','');
+  const r=parseInt(c.slice(0,2),16),g=parseInt(c.slice(2,4),16),b=parseInt(c.slice(4,6),16);
+  return {
+    r:Math.min(255,Math.round(r+(255-r)*a)),
+    g:Math.min(255,Math.round(g+(255-g)*a)),
+    b:Math.min(255,Math.round(b+(255-b)*a))
+  };
+};
+const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+const hexToRgb=h=>{
+  const s=h.replace('#','');
+  if(s.length===3){
+    return {
+      r:parseInt(s[0]+s[0],16)||0,
+      g:parseInt(s[1]+s[1],16)||0,
+      b:parseInt(s[2]+s[2],16)||0
+    };
+  }
+  return {
+    r:parseInt(s.slice(0,2),16)||0,
+    g:parseInt(s.slice(2,4),16)||0,
+    b:parseInt(s.slice(4,6),16)||0
+  };
+};
+const normalize=v=>{const l=Math.hypot(v.x,v.y,v.z)||1;return{x:v.x/l,y:v.y/l,z:v.z/l}};
+const dot=(a,b)=>a.x*b.x+a.y*b.y+a.z*b.z;
+const TAU=Math.PI*2;
+const SHADOW_FULL=110,SHADOW_REACH=260;   /* shadow distance (voxels from centre): full strength until, gone by */
+const SHADOW_STAMP=.26,SHADOW_BLUR_MIN=18,SHADOW_BLUR_MAX=200;   /* per-voxel stamp alpha, blur reach range (canvas px) */
+const BLEED_MAX=.8,BLEED_BLUR=100,BLEED_REACH=160;   /* layer opacity at full bleed, blur reach (canvas px), fade distance (voxels) */
+const FAR=1000;          /* distance used to fake a sun (directional light) as a very far point */
+const MAX_LIGHTS=4;
+
+const project=(x,y,z,rotX,rotY,rotZ)=>{
+  let px=x-CEN,py=y-CEN,pz=z-CEN;
+  const rx=rotX*Math.PI/180,y1=py*Math.cos(rx)-pz*Math.sin(rx),z1=py*Math.sin(rx)+pz*Math.cos(rx);
+  py=y1;pz=z1;
+  const ry=rotY*Math.PI/180,x2=px*Math.cos(ry)+pz*Math.sin(ry),z2=-px*Math.sin(ry)+pz*Math.cos(ry);
+  px=x2;pz=z2;
+  const rz=rotZ*Math.PI/180,x3=px*Math.cos(rz)-py*Math.sin(rz),y3=px*Math.sin(rz)+py*Math.cos(rz);
+  return{x:x3,y:y3-pz*.1,z:pz};
+};
+
+/* shadow of a point at (x,y,z) cast by a positional light onto the ground plane */
+const projectShadow=(x,y,z,lx,ly,lz,gy)=>{
+  const dy=y-ly;
+  if(Math.abs(dy)<0.001) return null;
+  const t=(gy-ly)/dy;
+  if(t<=0) return null;
+  if(t>50) return null;
+  const dx=x-lx,dz=z-lz;
+  const sx=lx+dx*t, sz=lz+dz*t;
+  if(Math.abs(sx-CEN)>GRID*3||Math.abs(sz-CEN)>GRID*3) return null;
+  return{x:sx,y:gy,z:sz};
+};
+
+/* shadow of a point cast by a directional light (sun): parallel rays, L = unit vector pointing TO the sun.
+   Voxels below the ground plane cast nothing (they are "in" the ground). */
+const projectShadowDir=(x,y,z,L,gy)=>{
+  if(L.y<.02) return null;
+  const s=(y-gy)/L.y;
+  if(s<0) return null;
+  const sx=x-L.x*s,sz=z-L.z*s;
+  if(Math.abs(sx-CEN)>GRID*3||Math.abs(sz-CEN)>GRID*3) return null;
+  return{x:sx,y:gy,z:sz};
+};
+
+/* a shadow "sample" is either a position {x,y,z} or a direction {dir} */
+const castShadow=(x,y,z,s)=>s.dir?projectShadowDir(x,y,z,s.dir,GROUND_Y):projectShadow(x,y,z,s.x,s.y,s.z,GROUND_Y);
+
+/* unit vector pointing toward the sun. az 0 = from the front, 90 = from the left, 180 = behind, 270 = right */
+const sunDir=(az,el)=>{
+  const a=az*Math.PI/180,e=el*Math.PI/180,ce=Math.cos(e);
+  return{x:-ce*Math.cos(a),y:Math.sin(e),z:ce*Math.sin(a)};
+};
+
+/* point light distance falloff: smooth window that reaches zero at `range` */
+const pointFalloff=(dist,range)=>{
+  const q=clamp(dist/Math.max(1,range),0,1),f=1-q*q;
+  return f*f;
+};
+
+const sphereNormal=(s,t,u)=>normalize({x:s,y:t,z:u});
+
+const cubeNormal=(s,t,u,half)=>{
+  const ax=Math.abs(s)-half, ay=Math.abs(t)-half, az=Math.abs(u)-half;
+  if(ax>0||ay>0||az>0){
+    const dx=Math.max(ax,0)*Math.sign(s||1);
+    const dy=Math.max(ay,0)*Math.sign(t||1);
+    const dz=Math.max(az,0)*Math.sign(u||1);
+    return normalize({x:dx,y:dy,z:dz});
+  }
+  if(ax>=ay && ax>=az) return {x:Math.sign(s||1),y:0,z:0};
+  if(ay>=ax && ay>=az) return {x:0,y:Math.sign(t||1),z:0};
+  return {x:0,y:0,z:Math.sign(u||1)};
+};
+
+const torusNormal=(s,t,u,R,r)=>{
+  const rad=Math.hypot(s,u)||1e-6;
+  const qx=rad-R, qy=t, ql=Math.hypot(qx,qy)||1e-6;
+  const nx2=qx/ql, ny2=qy/ql;
+  const rx=s/rad, rz=u/rad;
+  return normalize({x:rx*nx2, y:ny2, z:rz*nx2});
+};
+
+const coneNormal=(s,t,u,R0,H)=>{
+  const halfH=H/2, k=R0/H;
+  const rad=Math.hypot(s,u)||1e-6;
+  const sideVal=rad-k*(halfH-t);
+  const baseVal=(-halfH)-t;
+  if(baseVal>sideVal) return {x:0,y:-1,z:0};
+  return normalize({x:s/rad, y:k, z:u/rad});
+};
+
+/* --- texture sampling + per-shape UV mappers --- */
+
+const sampleTexture=(u,v)=>{
+  const tex=state.texture;
+  if(!tex) return state.color;
+  u=((u%1)+1)%1; v=((v%1)+1)%1;
+  const x=Math.min(tex.w-1,Math.floor(u*tex.w));
+  const y=Math.min(tex.h-1,Math.floor(v*tex.h));
+  const i=(y*tex.w+x)*4;
+  const to2=n=>('0'+n.toString(16)).slice(-2);
+  return '#'+to2(tex.data[i])+to2(tex.data[i+1])+to2(tex.data[i+2]);
+};
+
+/* each returns {u,v} in 0..1 for local coords s,t,u (relative to shape center) */
+const UV_MAPPERS={
+  sphere:(s,t,u)=>({
+    u:.5+Math.atan2(u,s)/TAU,
+    v:.5-Math.asin(clamp(t/72,-1,1))/Math.PI
+  }),
+  cube:(s,t,u)=>{
+    const h=56,ax=Math.abs(s),ay=Math.abs(t),az=Math.abs(u);
+    if(ax>=ay&&ax>=az){           // +x / -x faces
+      const uu=(t+h)/(2*h),vv=(u+h)/(2*h);
+      return {u:s>0?uu:1-uu,v:vv};
+    }
+    if(ay>=ax&&ay>=az){           // +y / -y faces
+      const uu=(s+h)/(2*h),vv=(u+h)/(2*h);
+      return {u:uu,v:t>0?vv:1-vv};
+    }
+    const uu=(s+h)/(2*h),vv=(t+h)/(2*h);  // +z / -z faces
+    return {u:u>0?uu:1-uu,v:vv};
+  },
+  torus:(s,t,u)=>{
+    const R=52,rad=Math.hypot(s,u);
+    return {
+      u:Math.atan2(u,s)/TAU,
+      v:.5+Math.atan2(t,rad-R)/TAU
+    };
+  },
+  cone:(s,t,u)=>{
+    const H=136,halfH=H/2;
+    return {
+      u:Math.atan2(u,s)/TAU,
+      v:(halfH-t)/H
+    };
+  }
+};
+
+/* shape makers now sample points directly off the true continuous surface (mesh math, not a
+   voxel lattice) so silhouettes and shading are smooth at any zoom instead of stair-stepping.
+   They still take a color provider fn instead of a single color, and still emit {x,y,z,color,nx,ny,nz} —
+   x/y/z are just floats now (grid-centered) instead of integer lattice indices. */
+const createSphere=(r,getColor)=>{
+  const d=[],area=4*Math.PI*r*r,n=Math.max(8,Math.round(area/(SURFACE_PITCH*SURFACE_PITCH)));
+  const golden=Math.PI*(3-Math.sqrt(5));
+  for(let i=0;i<n;i++){
+    const yFrac=n>1?1-(i/(n-1))*2:0,rad=Math.sqrt(Math.max(0,1-yFrac*yFrac)),theta=golden*i;
+    const nx=Math.cos(theta)*rad,ny=yFrac,nz=Math.sin(theta)*rad;
+    const s=nx*r,t=ny*r,u=nz*r;
+    d.push({x:s+CEN,y:t+CEN,z:u+CEN,color:getColor(s,t,u),nx,ny,nz});
+  }
+  return d;
+};
+
+const createCube=(half,getColor)=>{
+  const d=[],n=Math.max(2,Math.round((2*half)/SURFACE_PITCH)),step=(2*half)/n;
+  const faces=[{axis:'x',sign:1},{axis:'x',sign:-1},{axis:'y',sign:1},{axis:'y',sign:-1},{axis:'z',sign:1},{axis:'z',sign:-1}];
+  for(const f of faces){
+    for(let i=0;i<=n;i++)for(let j=0;j<=n;j++){
+      const a=-half+i*step,b=-half+j*step;
+      let s,t,u,nx=0,ny=0,nz=0;
+      if(f.axis==='x'){s=f.sign*half;t=a;u=b;nx=f.sign;}
+      else if(f.axis==='y'){s=a;t=f.sign*half;u=b;ny=f.sign;}
+      else{s=a;t=b;u=f.sign*half;nz=f.sign;}
+      d.push({x:s+CEN,y:t+CEN,z:u+CEN,color:getColor(s,t,u),nx,ny,nz});
+    }
+  }
+  return d;
+};
+
+const createTorus=(R,r,getColor)=>{
+  const d=[],nu=Math.max(8,Math.round(TAU*(R+r)/SURFACE_PITCH)),nv=Math.max(8,Math.round(TAU*r/SURFACE_PITCH));
+  for(let i=0;i<nu;i++){
+    const uAng=(i/nu)*TAU,cu=Math.cos(uAng),su=Math.sin(uAng);
+    for(let j=0;j<nv;j++){
+      const vAng=(j/nv)*TAU,cv=Math.cos(vAng),sv=Math.sin(vAng),rad=R+r*cv;
+      const s=rad*cu,t=r*sv,u=rad*su,nx=cv*cu,ny=sv,nz=cv*su;
+      d.push({x:s+CEN,y:t+CEN,z:u+CEN,color:getColor(s,t,u),nx,ny,nz});
+    }
+  }
+  return d;
+};
+
+const createCone=(R0,H,getColor)=>{
+  const d=[],halfH=H/2,k=R0/H,slant=Math.hypot(R0,H);
+  const nu=Math.max(8,Math.round(TAU*R0/SURFACE_PITCH)),nt=Math.max(2,Math.round(slant/SURFACE_PITCH));
+  for(let i=0;i<nu;i++){
+    const ang=(i/nu)*TAU,ca=Math.cos(ang),sa=Math.sin(ang);
+    for(let j=0;j<=nt;j++){
+      const t=-halfH+(j/nt)*H,Rt=k*(halfH-t);
+      const s=Rt*ca,u=Rt*sa;
+      let nx=ca,ny=k,nz=sa;const ln=Math.hypot(nx,ny,nz)||1;nx/=ln;ny/=ln;nz/=ln;
+      d.push({x:s+CEN,y:t+CEN,z:u+CEN,color:getColor(s,t,u),nx,ny,nz});
+    }
+  }
+  const nr=Math.max(1,Math.round(R0/SURFACE_PITCH));
+  for(let ri=1;ri<=nr;ri++){
+    const rad=ri/nr*R0,circ=TAU*rad,nc=Math.max(8,Math.round(circ/SURFACE_PITCH));
+    for(let ci=0;ci<nc;ci++){
+      const ang=(ci/nc)*TAU,s=rad*Math.cos(ang),u=rad*Math.sin(ang),t=-halfH;
+      d.push({x:s+CEN,y:t+CEN,z:u+CEN,color:getColor(s,t,u),nx:0,ny:-1,nz:0});
+    }
+  }
+  d.push({x:CEN,y:-halfH+CEN,z:CEN,color:getColor(0,-halfH,0),nx:0,ny:-1,nz:0});
+  return d;
+};
+
+const SHAPES={
+  sphere:{make:getC=>createSphere(72,getC),radius:72},
+  cube:{make:getC=>createCube(56,getC),radius:56*Math.sqrt(3)},
+  torus:{make:getC=>createTorus(52,24,getC),radius:76},
+  cone:{make:getC=>createCone(64,136,getC),radius:64}
+};
+
+/* prep pass: cache chroma (for color bleed) on every dot, and flag which are on the visible shell.
+   alreadySurface=true (procedural shapes + imported meshes, both now sampled directly off the true
+   surface) skips the neighbor-occupancy culling below — there's no interior fill to cull, every
+   sampled point already lies on the shell. The legacy integer-lattice culling is kept only for the
+   extruded letter shape, which still fills a voxel grid and needs its shell extracted. */
+const prepDots=(dots,alreadySurface)=>{
+  const cache=d=>{
+    const c=hexToRgb(d.color),lum=.299*c.r+.587*c.g+.114*c.b;
+    d.c=c;d.lum=lum;
+    const chroma=Math.hypot(c.r-lum,c.g-lum,c.b-lum),mx=Math.max(c.r,c.g,c.b)||1;
+    d.bw=clamp(chroma/90,0,1);
+    d.bsr=c.r*195/mx|0;d.bsg=c.g*195/mx|0;d.bsb=c.b*195/mx|0;
+  };
+  if(alreadySurface){
+    for(const d of dots){d.surf=true;cache(d);}
+    return dots;
+  }
+  const key=(x,y,z)=>((x+2)*260+(y+2))*260+(z+2);
+  const occ=new Set();
+  for(const d of dots) occ.add(key(d.x,d.y,d.z));
+  const out=[];
+  for(const d of dots){
+    // === SPEED: Skip interior voxels — never visible, ~100× fewer to render ===
+    const isSurf=!(occ.has(key(d.x+1,d.y,d.z))&&occ.has(key(d.x-1,d.y,d.z))&&
+                  occ.has(key(d.x,d.y+1,d.z))&&occ.has(key(d.x,d.y-1,d.z))&&
+                  occ.has(key(d.x,d.y,d.z+1))&&occ.has(key(d.x,d.y,d.z-1)));
+    if(!isSurf) continue;
+    d.surf=true;
+    cache(d);
+    out.push(d);
+  }
+  return out;
+};
+
+const rebuildShape=()=>{
+  if(state.shape==='mesh'){
+    /* imported STL/OBJ voxels: always a single flat color, texture/gradient are ignored */
+    if(!state.meshDots||!state.meshDots.length){
+      state.dots=[];
+      state.shapeRadius=SHAPES.sphere.radius;
+      return;
+    }
+    state.dots=prepDots(state.meshDots.map(d=>({x:d.x,y:d.y,z:d.z,nx:d.nx,ny:d.ny,nz:d.nz,color:d.color||state.color,material:d.material||''})),true);
+    state.shapeRadius=state.meshRadius||20;
+    return;
+  }
+  if(state.shape==='text'){
+    /* extruded letter voxels: same single flat-color treatment as an imported mesh —
+       texture and gradient are ignored since there is no UV mapping for arbitrary glyphs */
+    if(!state.textDots||!state.textDots.length){
+      state.dots=[];
+      state.shapeRadius=SHAPES.sphere.radius;
+      return;
+    }
+    const col=state.color;
+    state.dots=prepDots(state.textDots.map(d=>({x:d.x,y:d.y,z:d.z,nx:d.nx,ny:d.ny,nz:d.nz,color:col})));
+    state.shapeRadius=state.textRadius||74;
+    return;
+  }
+  const def=SHAPES[state.shape];
+  let getC;
+  if(state.texture){
+    const uv=UV_MAPPERS[state.shape];
+    getC=(s,t,u)=>{const p=uv(s,t,u);return sampleTexture(p.u,p.v)};
+  }else{
+    getC=()=>state.color;
+  }
+  state.dots=prepDots(def.make(getC),true);
+  state.shapeRadius=def.radius;
+};
+
+/* ==================== LIGHT SYSTEM ====================
+   Four light types. Positions are relative to the centre of the shape (0,0,0 = middle of the object).
+     area   – rectangular emitter (soft shadows via sample grid), position + size
+     point  – omni light with distance falloff (range)
+     sun    – directional light: parallel rays, azimuth + elevation, optional soft shadow edge
+     hemi   – sky/ground ambient fill, shades by surface normal (no shadow, no position)
+*/
+const LIGHT_DEFS={
+  area:{name:'area',shadow:true,
+    params:[
+      {key:'x',label:'pos X',min:-600,max:600,step:2},
+      {key:'y',label:'pos Y',min:-400,max:500,step:2},
+      {key:'z',label:'pos Z',min:-600,max:600,step:2},
+      {key:'intensity',label:'intens',min:0,max:6,step:.05},
+      {key:'range',label:'range',min:80,max:1200,step:10},
+      {key:'sizeX',label:'size X',min:1,max:240,step:1},
+      {key:'sizeZ',label:'size Z',min:1,max:240,step:1}
+    ],
+    make:()=>({x:-60,y:30,z:16,sizeX:32,sizeZ:32,range:500,color:'#FFFFFF',intensity:1.2}),
+    note:'rectangular emitter — bigger = softer shadows'},
+  point:{name:'point',shadow:true,
+    params:[
+      {key:'x',label:'pos X',min:-600,max:600,step:2},
+      {key:'y',label:'pos Y',min:-400,max:500,step:2},
+      {key:'z',label:'pos Z',min:-600,max:600,step:2},
+      {key:'intensity',label:'intens',min:0,max:6,step:.05},
+      {key:'range',label:'range',min:80,max:1600,step:10}
+    ],
+    make:()=>({x:-56,y:44,z:24,range:500,color:'#FFFFFF',intensity:1.2}),
+    note:'distance falloff — range = full fade distance'},
+  sun:{name:'sun',shadow:true,
+    params:[
+      {key:'az',label:'azimuth',min:0,max:360,step:1},
+      {key:'el',label:'elev',min:-90,max:90,step:1},
+      {key:'intensity',label:'intens',min:0,max:3,step:.05},
+      {key:'soft',label:'soft',min:0,max:24,step:.5}
+    ],
+    make:()=>({az:25,el:45,soft:0,color:'#FFF1D6',intensity:1.3}),
+    note:'azimuth 0=front, 90=left, 180=back, 270=right'},
+  hemi:{name:'hemisphere',shadow:false,
+    params:[
+      {key:'intensity',label:'intens',min:0,max:2,step:.05}
+    ],
+    make:()=>({color:'#CFE3FF',ground:'#4A3F36',intensity:.5}),
+    note:'sky/ground ambient — no shadow'}
+};
+
+const makeLight=(type,over)=>Object.assign({type,enabled:true,shadow:true},LIGHT_DEFS[type].make(),over||{});
+
+const PRESETS={
+  original:()=>[
+    makeLight('area',{x:-62,y:-26,z:-10,sizeX:32,sizeZ:32,range:500,color:'#FFFFFF',intensity:1.2}),
+    makeLight('area',{enabled:false,x:-114,y:-20,z:-44,sizeX:40,sizeZ:40,range:500,color:'#ff7f27',intensity:.8}),
+    makeLight('area',{enabled:false,x:-24,y:-14,z:-94,sizeX:48,sizeZ:48,range:500,color:'#00a2e8',intensity:.7})
+  ],
+  studio:()=>[
+    makeLight('area',{x:-80,y:50,z:60,sizeX:40,sizeZ:40,intensity:1.2}),
+    makeLight('area',{x:-70,y:0,z:-70,sizeX:56,sizeZ:56,color:'#9EC5FF',intensity:.55,shadow:false}),
+    makeLight('point',{x:76,y:48,z:-56,color:'#FFD9A8',intensity:1.0,range:400}),
+    makeLight('hemi',{intensity:.3})
+  ],
+  sunsky:()=>[
+    makeLight('sun',{az:25,el:45,color:'#FFF1D6',intensity:1.4,soft:4}),
+    makeLight('hemi',{intensity:.5})
+  ],
+  sunset:()=>[
+    makeLight('sun',{az:100,el:9,color:'#FF9A4D',intensity:1.5,soft:5}),
+    makeLight('hemi',{color:'#4A4F9A',ground:'#2A1A1A',intensity:.4})
+  ],
+  neon:()=>[
+    makeLight('point',{x:-60,y:16,z:76,color:'#FF2BD6',intensity:1.5,range:340}),
+    makeLight('point',{x:-60,y:16,z:-76,color:'#22E4FF',intensity:1.5,range:340}),
+    makeLight('hemi',{color:'#1B1440',ground:'#0A0A12',intensity:.35})
+  ]
+};
+
+/* light samples on a rectangular emitter (absolute coords) */
+const getAreaLightSamples=(light,res)=>{
+  const samples=[];
+  const stepX=light.sizeX/res, stepZ=light.sizeZ/res;
+  const startX=light.x-light.sizeX/2+stepX/2;
+  const startZ=light.z-light.sizeZ/2+stepZ/2;
+  for(let i=0;i<res;i++){
+    for(let j=0;j<res;j++){
+      const z=startZ+j*stepZ;
+      samples.push({x:startX+i*stepX,y:light.y,z,lh:clamp(z/LAYERS,.25,1)});
+    }
+  }
+  return samples;
+};
+
+/* once per frame: turn the editable light list into ready-to-use records
+   (parsed colours, sample sets, falloff gain, sun direction, shared ambient floor) */
+const prepareLights=()=>{
+  const res=state.sampleRes,out=[];
+  let nd=0;
+  for(const l of state.lights){
+    if(!l.enabled) continue;
+    const lcol=hexToRgb(l.color);
+    const A={
+      type:l.type,lcol,intensity:l.intensity,
+      bright:Math.max(lcol.r,lcol.g,lcol.b)/255,
+      gain:l.intensity,
+      samples:null,shadowSamples:null,center:null,pos:null,dir:null,range:1,
+      sky:null,ground:null,fillCol:''
+    };
+    if(l.type==='hemi'){
+      A.sky=lcol;A.ground=hexToRgb(l.ground);
+      out.push(A);continue;
+    }
+    if(l.intensity<.01) continue;  // SPEED: skip negligible lights
+    nd++;
+    A.fillCol=`rgba(${clamp(10+(lcol.r-128)*.05,0,40)},${clamp(10+(lcol.g-128)*.05,0,40)},${clamp(20+(lcol.b-128)*.05,0,50)},`;
+    const casts=l.shadow!==false;
+    if(l.type==='area'){
+      const pos={x:CEN+l.x,y:CEN+l.y,z:CEN+l.z,sizeX:l.sizeX,sizeZ:l.sizeZ};
+      A.apos=pos;A.sizeX=l.sizeX;A.sizeZ=l.sizeZ;A.range=l.range||500;
+      A.samples=getAreaLightSamples(pos,res);
+      A.center={x:pos.x,y:pos.y,z:pos.z,lh:clamp(pos.z/LAYERS,.25,1)};
+      A.shadowSamples=casts?A.samples:null;
+    }else if(l.type==='point'){
+      const pos={x:CEN+l.x,y:CEN+l.y,z:CEN+l.z};
+      A.pos=pos;A.range=l.range;
+      /* Distance attenuation is applied once at the surface; moving the light no longer double-fades it. */
+      A.gain=l.intensity;
+      A.center={x:pos.x,y:pos.y,z:pos.z,lh:clamp(pos.z/LAYERS,.25,1)};
+      A.shadowSamples=casts?[A.center]:null;
+    }else{ /* sun */
+      A.dir=sunDir(l.az,l.el);
+      A.center={dir:A.dir,lh:1};
+      if(casts){
+        if(l.soft>0&&res>1){
+          const sm=[];
+          for(let i=0;i<res;i++)for(let j=0;j<res;j++){
+            const du=(i+.5)/res-.5,dv=(j+.5)/res-.5;
+            sm.push({dir:sunDir(l.az+du*l.soft*2,clamp(l.el+dv*l.soft*2,-90,90)),lh:1});
+          }
+          A.shadowSamples=sm;
+        }else A.shadowSamples=[A.center];
+      }
+    }
+    out.push(A);
+  }
+  state.active=out;
+  /* the "never fully black" floor used to be added by every light, so it stacked; share it instead */
+  state.floorP=.15/Math.max(1,nd);
+  state.floorM=.1/Math.max(1,nd);
+};
+
+const refractCaustic=(d,lx,ly,lz,time)=>{
+  const n={x:d.nx,y:d.ny,z:d.nz};
+  const L=normalize({x:lx-d.x,y:ly-d.y,z:lz-d.z});
+  const cosT=dot(n,L);
+  if(cosT<=0)return 0;
+  const eta=1/1.45,k=1-eta*eta*(1-cosT*cosT);
+  if(k<0)return 0;
+  const refr=normalize({
+    x:eta*L.x-(eta*cosT+Math.sqrt(k))*n.x,
+    y:eta*L.y-(eta*cosT+Math.sqrt(k))*n.y,
+    z:eta*L.z-(eta*cosT+Math.sqrt(k))*n.z
+  });
+  const align=Math.max(0,dot(refr,normalize({x:CEN-d.x,y:CEN-d.y,z:CEN-d.z})));
+  const edge=Math.exp(-Math.pow((Math.hypot(d.x-CEN,d.z-CEN)-state.shapeRadius*.78)/3.5,2));
+  return clamp(align*edge*(1+Math.sin(time*.003+d.y*.3)*.15),0,1);
+};
+
+const causticRing=(sx,sz,lx,ly,lz,time)=>{
+  const lx2=lx-CEN,lz2=lz-CEN,ll=Math.hypot(lx2,lz2)||1,plx=lx2/ll,plz=lz2/ll;
+  const rx=sx-CEN,rz=sz-CEN,proj=rx*plx+rz*plz;
+  if(proj>2)return 0;
+  const px=rx-proj*plx,pz=rz-proj*plz,pd=Math.hypot(px,pz);
+  const fr=state.shapeRadius*.55+Math.sin(time*.0005)*1.5,rd=pd-fr,ri=Math.exp(-(rd*rd)/12);
+  const dd=proj+12,di=Math.exp(-(dd*dd)/40),ob=proj<0?Math.exp(proj*.08):0;
+  const ir=pd-4,ir2=Math.exp(-(ir*ir)/4)*di*ob*.6;
+  return clamp(ri*di*ob*1.5+ir2,0,1);
+};
+
+const phongSample=(d,lx,ly,lz,lcol,linten,base,pow,inten)=>{
+  const n={x:d.nx,y:d.ny,z:d.nz};
+  const l=normalize({x:lx-d.x,y:ly-d.y,z:lz-d.z});
+  const v=normalize({x:CEN-d.x,y:CEN-d.y,z:80-d.z});
+  const h=normalize({x:l.x+v.x,y:l.y+v.y,z:l.z+v.z});
+  const diff=Math.max(state.floorP,Math.max(0,dot(n,l))),spec=Math.pow(Math.max(0,dot(n,h)),pow);
+  const c=d.c;
+  return{
+    r:clamp((c.r*diff+255*spec*inten)*lcol.r*linten/255,0,255),
+    g:clamp((c.g*diff+255*spec*inten)*lcol.g*linten/255,0,255),
+    b:clamp((c.b*diff+255*spec*inten)*lcol.b*linten/255,0,255)
+  };
+};
+
+const principledSample=(d,lx,ly,lz,lcol,linten,rough,specular,coat,coatGloss,sheen,subsurface,wrap)=>{
+  const n={x:d.nx,y:d.ny,z:d.nz};
+  const l=normalize({x:lx-d.x,y:ly-d.y,z:lz-d.z});
+  const v=normalize({x:CEN-d.x,y:CEN-d.y,z:80-d.z});
+  const h=normalize({x:l.x+v.x,y:l.y+v.y,z:l.z+v.z});
+  const nl=Math.max(0,dot(n,l)),nv=Math.max(.001,dot(n,v)),nh=Math.max(0,dot(n,h)),lh=Math.max(0,dot(l,h));
+  const rr=Math.max(.04,rough),a=rr*rr,a2=a*a,den=nh*nh*(a2-1)+1;
+  const D=a2/(Math.PI*Math.max(.0001,den*den)),k=a*.5;
+  const G=(nv/(nv*(1-k)+k))*(nl/(nl*(1-k)+k));
+  const F0=.04+.04*clamp(specular,0,1),F=F0+(1-F0)*Math.pow(1-lh,5);
+  const micro=D*G*F/Math.max(.001,4*nv*Math.max(nl,.001));
+  const w=clamp(wrap,0,.5),wn=clamp((nl+w)/(1+w),0,1);
+  const fd90=.5+2*lh*lh*rr,fd=1+(fd90-1)*Math.pow(1-nl,5);
+  const diff=wn*fd*(1-F);
+  const s= sheen*Math.pow(1-lh,5)*(.5+.5*nh);
+  const sss=subsurface*(1-nl)*(1-nl)*(.55+.45*nv);
+  const cr=mixNum(.08,.35,1-clamp(coatGloss,0,1)),ca=cr*cr,ca2=ca*ca,cden=nh*nh*(ca2-1)+1;
+  const cD=ca2/(Math.PI*Math.max(.0001,cden*cden)),ck=ca*.5,cG=(nv/(nv*(1-ck)+ck))*(nl/(nl*(1-ck)+ck));
+  const cF=.04+.96*Math.pow(1-lh,5),coatSpec=cD*cG*cF/Math.max(.001,4*nv*Math.max(nl,.001))*coat;
+  const c=d.c;
+  const br=linten;
+  return {r:clamp((c.r*(diff+sss)+255*(micro+s+coatSpec))*lcol.r/255*br,0,255),
+          g:clamp((c.g*(diff+sss)+255*(micro+s+coatSpec))*lcol.g/255*br,0,255),
+          b:clamp((c.b*(diff+sss)+255*(micro+s+coatSpec))*lcol.b/255*br,0,255)};
+};
+const mixNum=(a,b,t)=>a+(b-a)*t;
+const hemiPrincipled=(d,A)=>{
+  const n={x:d.nx,y:d.ny,z:d.nz};
+  const k=.5+.5*n.y;
+  const c=hexToRgb(d.color);
+  const env={
+    r:A.ground.r+(A.sky.r-A.ground.r)*k,
+    g:A.ground.g+(A.sky.g-A.ground.g)*k,
+    b:A.ground.b+(A.sky.b-A.ground.b)*k
+  };
+  const fres=.04+.96*Math.pow(1-Math.max(0,dot(n,normalize({x:CEN-d.x,y:CEN-d.y,z:80-d.z}))),5);
+  return {
+    r:c.r/255*env.r*A.intensity*(1-.35*fres),
+    g:c.g/255*env.g*A.intensity*(1-.35*fres),
+    b:c.b/255*env.b*A.intensity*(1-.35*fres)
+  };
+};
+const metalSample=(d,lx,ly,lz,lcol,linten,base,rough)=>{
+  const n={x:d.nx,y:d.ny,z:d.nz};
+  const l=normalize({x:lx-d.x,y:ly-d.y,z:lz-d.z});
+  const v=normalize({x:CEN-d.x,y:CEN-d.y,z:80-d.z});
+  const h=normalize({x:l.x+v.x,y:l.y+v.y,z:l.z+v.z});
+  const diff=Math.max(state.floorM,Math.max(0,dot(n,l)))*(1-rough),spec=Math.pow(Math.max(0,dot(n,h)),Math.max(10,90/(rough+.15)));
+  const c=d.c;
+  return{
+    r:clamp((c.r*diff+220*spec)*lcol.r*linten/255,0,255),
+    g:clamp((c.g*diff+215*spec)*lcol.g*linten/255,0,255),
+    b:clamp((c.b*diff+210*spec)*lcol.b*linten/255,0,255)
+  };
+};
+
+/* glass: only the fresnel sheen depends on the light. The tinted body colour is added once in render(),
+   so it no longer multiplies with the number of lights. */
+const glassSample=(d,lx,ly,lz,lcol,linten,base,str)=>{
+  const n={x:d.nx,y:d.ny,z:d.nz};
+  const v=normalize({x:CEN-d.x,y:CEN-d.y,z:80-d.z});
+  const fres=Math.pow(1-Math.max(0,Math.abs(dot(n,v))),3.5);
+  const bright=Math.max(lcol.r,lcol.g,lcol.b)/255;
+  return{
+    r:clamp(fres*130*str*bright*lcol.r/255*linten,0,255),
+    g:clamp(fres*150*str*bright*lcol.g/255*linten,0,255),
+    b:clamp(fres*170*str*bright*lcol.b/255*linten,0,255)
+  };
+};
+
+/* --- hemisphere light: per-material ambient response --- */
+const hemiMix=(A,k)=>({
+  r:A.ground.r+(A.sky.r-A.ground.r)*k,
+  g:A.ground.g+(A.sky.g-A.ground.g)*k,
+  b:A.ground.b+(A.sky.b-A.ground.b)*k
+});
+const hemiViewK=(d,rough)=>{
+  /* which part of the sky/ground the surface mirrors: blends from the reflection vector (smooth)
+     toward the plain normal (rough) */
+  const v=normalize({x:CEN-d.x,y:CEN-d.y,z:80-d.z});
+  const nv=d.nx*v.x+d.ny*v.y+d.nz*v.z;
+  const ry=clamp(2*nv*d.ny-v.y,-1,1);
+  const t=clamp(rough/.6,0,1);
+  return(.5+.5*ry)*(1-t)+(.5+.5*d.ny)*t;
+};
+const hemiPhong=(d,A)=>{
+  const e=hemiMix(A,.5+.5*d.ny),c=d.c,s=A.intensity/255;
+  return{r:c.r*e.r*s,g:c.g*e.g*s,b:c.b*e.b*s};
+};
+const hemiMetal=(d,A,base,rough)=>{
+  const e=hemiMix(A,hemiViewK(d,rough)),c=d.c,s=A.intensity*(1-rough*.5)/255;
+  return{r:c.r*e.r*s,g:c.g*e.g*s,b:c.b*e.b*s};
+};
+const hemiGlass=(d,A,base,str)=>{
+  const v=normalize({x:CEN-d.x,y:CEN-d.y,z:80-d.z});
+  const fres=Math.pow(1-Math.max(0,Math.abs(d.nx*v.x+d.ny*v.y+d.nz*v.z)),3.5);
+  const e=hemiMix(A,hemiViewK(d,0)),s=fres*str*A.intensity/255;
+  return{r:130*e.r*s,g:150*e.g*s,b:170*e.b*s};
+};
+
+const glowSample=(base,k)=>{
+  const c=hexToRgb(base),hot=Math.max(0,k-1)*70,hk=Math.min(k,1.2);
+  return{
+    r:clamp(c.r*k+hot,0,255),g:clamp(c.g*k+hot,0,255),b:clamp(c.b*k+hot,0,255),
+    hr:clamp(c.r*hk,0,255),hg:clamp(c.g*hk,0,255),hb:clamp(c.b*hk,0,255)
+  };
+};
+
+/* sum every active light's contribution for one voxel */
+const shadeMultiLight=(d,shaderFn,hemiFn,...args)=>{
+  let tr=0,tg=0,tb=0;
+  for(const A of state.active){
+    if(A.type==='hemi'){
+      const c=hemiFn(d,A,...args);
+      tr+=c.r;tg+=c.g;tb+=c.b;
+    }else if(A.type==='sun'){
+      const c=shaderFn(d,d.x+A.dir.x*FAR,d.y+A.dir.y*FAR,d.z+A.dir.z*FAR,A.lcol,A.intensity,...args);
+      tr+=c.r;tg+=c.g;tb+=c.b;
+    }else if(A.type==='point'){
+      const p=A.pos,dist=Math.hypot(p.x-d.x,p.y-d.y,p.z-d.z);
+      const c=shaderFn(d,p.x,p.y,p.z,A.lcol,A.intensity*pointFalloff(dist,A.range),...args);
+      tr+=c.r;tg+=c.g;tb+=c.b;
+    }else{
+      const w=1/A.samples.length;
+      for(const s of A.samples){
+        const c=shaderFn(d,s.x,s.y,s.z,A.lcol,A.intensity,...args);
+        tr+=c.r*w;tg+=c.g*w;tb+=c.b*w;
+      }
+    }
+  }
+  return{r:tr,g:tg,b:tb};
+};
+
+/* --- brightness / contrast post effect --- */
+const applyBrightnessContrast=(r,g,b,brightness,contrast)=>{
+  // contrast pivots around mid-gray (128), brightness is a straight multiplier
+  const f=(v)=>{
+    let nv=(v-128)*contrast+128;
+    nv*=brightness;
+    return clamp(nv,0,255);
+  };
+  return {r:f(r),g:f(g),b:f(b)};
+};
+
+const state={
+  shape:'sphere',
+  dots:[],
+  shapeRadius:SHAPES.sphere.radius,
+  color:'#FFFFFF',
+  texture:null,
+  textureKind:null,
+  meshDots:null,
+  meshRadius:20,
+  meshMaterials:{},
+  meshMtlName:'',
+  textChar:'',
+  textDots:null,
+  textRadius:74,
+  textDepth:32,
+  rotX:192,rotY:85,rotZ:0,
+  sampleRes:1,
+  voxelOpacity:1.0,
+  phongPower:160,phongInten:1.6,phongOpacity:1,
+  principledOn:true,prRough:.32,prSpec:.50,prCoat:.16,prCoatGloss:.72,prSheen:.10,prSub:.08,prWrap:.18,
+  bulletOpacity:0,roughness:.25,
+  glassOpacity:0,glassStrength:.8,
+  reflOpacity:0,reflSky:.75,reflHorizon:.05,reflShadow:1,
+  glowOpacity:0,glowStrength:1.2,haloSize:96,glowMatch:true,glowColor:'#ffb347',
+  causticOpacity:.05,
+  fogAmount:.35,shadowOpacity:.3,shadowBlur:.5,shadowSharpness:.5,colorBleed:.4,bleedSharpness:.5,
+  causticSharpness:.5,
+  postBrightness:1.0,postContrast:1.0,
+  frontOpacity:1,backOpacity:1,split:0,lensBend:0,lensDisp:0,
+  spreadOn:false,spreadX:8,spreadY:8,spreadPasses:1,spreadSeed:1,
+  lights:PRESETS.original(),
+  active:[],floorP:.15,floorM:.1
+};
+state.dots=prepDots(SHAPES.sphere.make(()=>state.color));
+
+document.querySelectorAll('.title[data-target]').forEach(title=>{
+  title.addEventListener('click',()=>{
+    const target=document.getElementById(title.dataset.target);
+    if(!target) return;
+    const collapsed=title.classList.toggle('collapsed');
+    target.style.display=collapsed?'none':'';
+  });
+});
+
+/* ---------- lights UI ---------- */
+const lightsContainer=document.getElementById('lightsContainer');
+const addLightBtn=document.getElementById('addLight');
+const lightNote=document.getElementById('lightNote');
+
+const fmtVal=(v,step)=>step>=1?String(Math.round(v)):v.toFixed(step<.1?2:1);
+
+const lightBlockHTML=(L,i)=>{
+  const def=LIGHT_DEFS[L.type];
+  const colors=L.type==='hemi'
+    ?`<span class="cl">sky</span><input type="color" class="lc" data-i="${i}" data-k="color" value="${L.color}"><span class="cl">gnd</span><input type="color" class="lc" data-i="${i}" data-k="ground" value="${L.ground}">`
+    :`<input type="color" class="lc" data-i="${i}" data-k="color" value="${L.color}">`;
+  const rows=def.params.map(p=>{
+    const v=L[p.key];
+    return `<div class="row"><label>${p.label}</label><input type="range" class="lp" data-i="${i}" data-k="${p.key}" data-step="${p.step}" min="${p.min}" max="${p.max}" step="${p.step}" value="${v}"><span class="val" data-vi="${i}" data-vk="${p.key}">${fmtVal(v,p.step)}</span></div>`;
+  }).join('');
+  const foot=def.shadow
+    ?`<div class="light-foot"><label><input type="checkbox" class="light-shadow" data-i="${i}" ${L.shadow!==false?'checked':''}> casts shadow</label></div>`
+    :'';
+  const note=def.note?`<div class="note">${def.note}</div>`:'';
+  return `<div class="light-block${L.enabled?'':' off'}" data-block="${i}">
+    <div class="light-header">
+      <label><input type="checkbox" class="light-enable" data-i="${i}" ${L.enabled?'checked':''}> ${i+1} ${def.name}</label>
+      <div class="light-tools">${colors}<button class="light-del" data-i="${i}" title="remove light">&times;</button></div>
+    </div>
+    <div class="light-grid">${rows}</div>
+    ${foot}${note}
+  </div>`;
+};
+
+function buildLightUI(){
+  lightsContainer.innerHTML=state.lights.map(lightBlockHTML).join('');
+  const full=state.lights.length>=MAX_LIGHTS;
+  addLightBtn.disabled=full;
+  lightNote.textContent=full?'max '+MAX_LIGHTS+' lights — remove one to add another':'';
+}
+
+/* one set of delegated listeners survives every rebuild */
+lightsContainer.addEventListener('input',e=>{
+  const t=e.target,i=+t.dataset.i,L=state.lights[i];
+  if(!L) return;
+  if(t.classList.contains('lp')){
+    const k=t.dataset.k,v=+t.value;
+    L[k]=v;
+    const span=lightsContainer.querySelector('.val[data-vi="'+i+'"][data-vk="'+k+'"]');
+    if(span) span.textContent=fmtVal(v,+t.dataset.step);
+  }else if(t.classList.contains('lc')){
+    L[t.dataset.k]=t.value;
+  }
+});
+lightsContainer.addEventListener('change',e=>{
+  const t=e.target,i=+t.dataset.i,L=state.lights[i];
+  if(!L) return;
+  if(t.classList.contains('light-enable')){
+    L.enabled=t.checked;
+    const blk=lightsContainer.querySelector('[data-block="'+i+'"]');
+    if(blk) blk.classList.toggle('off',!L.enabled);
+  }else if(t.classList.contains('light-shadow')){
+    L.shadow=t.checked;
+  }
+});
+lightsContainer.addEventListener('click',e=>{
+  const b=e.target.closest?e.target.closest('.light-del'):null;
+  if(!b) return;
+  state.lights.splice(+b.dataset.i,1);
+  buildLightUI();
+});
+addLightBtn.addEventListener('click',()=>{
+  if(state.lights.length>=MAX_LIGHTS) return;
+  state.lights.push(makeLight(document.getElementById('addType').value));
+  buildLightUI();
+});
+document.getElementById('lightPreset').addEventListener('change',e=>{
+  const p=PRESETS[e.target.value];
+  if(!p) return;
+  state.lights=p();
+  buildLightUI();
+  e.target.value='';
+});
+
+let time=0;
+const canvas=document.getElementById('mainCanvas'),ctx=canvas.getContext('2d',{willReadFrequently:true});
+const cx=CANVAS_SIZE/2,cy=CANVAS_SIZE/2;
+const palette=document.getElementById('mainPalette');
+
+/* multi-scale blur pyramid (used by shadow and color bleed). Points are splatted onto a
+   base-size canvas, box-downsampled through the pyramid, then recombined coarse-to-fine
+   with per-level weights: fine levels give a tight rim, coarse levels a long soft tail,
+   so falloff is smooth instead of a single linear blur. No ctx.filter (Safari/iOS lacks it). */
+const mkLayer=n=>{
+  const c=document.createElement('canvas');c.width=c.height=n;
+  const x=c.getContext('2d');x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';
+  return{c,x,n};
+};
+const makePyramid=(base,levels)=>{
+  const down=[],up=[];
+  /* Never create zero-sized canvas levels: bit shifting 256 by 8+ would produce 0. */
+  levels=Math.max(1,Math.min(levels,Math.floor(Math.log2(base))+1));
+  for(let i=0;i<levels;i++){
+    const n=Math.max(1,base>>i);
+    down.push(mkLayer(n));
+    up.push(mkLayer(n));
+  }
+  return{
+    base,levels,down,up,
+    scale:base/CANVAS_SIZE,
+    ctx:down[0].x,
+    reach:down.map(l=>CANVAS_SIZE/l.n),   /* approx blur reach of each level, in canvas px */
+    clear(){down[0].x.clearRect(0,0,base,base)},
+    compose(w){
+      for(let i=1;i<levels;i++){
+        const L=down[i];
+        L.x.clearRect(0,0,L.n,L.n);
+        L.x.drawImage(down[i-1].c,0,0,L.n,L.n);
+      }
+      for(let i=levels-1;i>=0;i--){
+        const U=up[i];
+        U.x.clearRect(0,0,U.n,U.n);
+        U.x.globalAlpha=1;
+        if(i<levels-1) U.x.drawImage(up[i+1].c,0,0,U.n,U.n);
+        /* source-over (not 'lighter'): alpha saturates gracefully and hue stays true */
+        U.x.globalAlpha=Math.min(1,w[i]);
+        U.x.drawImage(down[i].c,0,0);
+        U.x.globalAlpha=1;
+      }
+      return up[0].c;
+    }
+  };
+};
+/* gaussian cutoff on the coarse end, soft cutoff on the fine end so the splat's own
+   silhouette never shows up as a hard outline; total = overall gain */
+const pyramidWeights=(pyr,size,total)=>{
+  const w=pyr.reach.map(r=>Math.exp(-.5*Math.pow(r/size,2))*Math.pow(clamp(r/(size*.22),0,1),1.5));
+  const sum=w.reduce((a,v)=>a+v,0)||1;
+  return w.map(v=>v*total/sum);
+};
+const bleedPyr=makePyramid(256,6);
+const shadowPyr=makePyramid(256,6);
+
+MS_PAINT_COLORS.forEach(c=>{
+  const b=document.createElement('button');
+  b.className='swatch'+(state.color===c?' selected':'');
+  b.style.background=c;
+  if(c.toUpperCase()==='#FFFFFF'){
+    b.style.boxShadow='inset 0 0 0 1px #ccc';
+  }
+  b.onclick=()=>{
+    state.color=c;
+    state.texture=null;
+    state.textureKind=null;
+    texInput.value='';
+    texInfo.textContent='';
+    rebuildShape();
+    palette.querySelectorAll('.swatch').forEach(s=>s.classList.remove('selected'));
+    b.classList.add('selected');
+  };
+  palette.appendChild(b);
+});
+
+const shapeSelect=document.getElementById('shapeSelect');
+shapeSelect.value=state.shape;
+shapeSelect.addEventListener('change',()=>{
+  state.shape=shapeSelect.value;
+  rebuildShape();
+});
+
+/* camera rotation sliders — rotate the whole scene; read fresh every frame, no rebuild needed */
+const setCameraRot=(x,y,z)=>{
+  state.rotX=x;state.rotY=y;state.rotZ=z;
+  const ex=document.getElementById('camRotX'),ey=document.getElementById('camRotY'),ez=document.getElementById('camRotZ');
+  const vx=document.getElementById('camRotXVal'),vy=document.getElementById('camRotYVal'),vz=document.getElementById('camRotZVal');
+  if(ex){ex.value=x;vx.textContent=x;}
+  if(ey){ey.value=y;vy.textContent=y;}
+  if(ez){ez.value=z;vz.textContent=z;}
+};
+/* --- texture upload (read as a data URL so it also works when hosted) --- */
+const texInput=document.getElementById('texInput');
+const texInfo=document.getElementById('texInfo');
+document.getElementById('texClear').addEventListener('click',()=>{
+  state.texture=null;
+  state.textureKind=null;
+  texInput.value='';
+  texInfo.textContent='';
+  rebuildShape();
+});
+texInput.addEventListener('change',e=>{
+  const f=e.target.files[0];
+  if(!f) return;
+  const fr=new FileReader();
+  fr.onload=()=>{
+    const img=new Image();
+    img.onload=()=>{
+      const off=document.createElement('canvas');
+      off.width=img.width; off.height=img.height;
+      const oc=off.getContext('2d');
+      oc.drawImage(img,0,0);
+      state.texture={
+        w:img.width,
+        h:img.height,
+        data:oc.getImageData(0,0,img.width,img.height).data
+      };
+      state.textureKind='image';
+      texInfo.textContent='loaded '+img.width+' x '+img.height+' — mapped to '+state.shape;
+      rebuildShape();
+    };
+    img.src=fr.result;
+  };
+  fr.readAsDataURL(f);
+});
+
+/* --- gradient texture: build a small canvas gradient (linear / radial / angular / conic)
+   with any number of color stops, and feed it in through the same texture pipeline an
+   uploaded image uses, so it gets uv-mapped per shape exactly the same way. --- */
+const gradState={
+  type:'linear',
+  angle:35,
+  stops:[
+    {pos:0,color:'#FF2BD6'},
+    {pos:.5,color:'#22E4FF'},
+    {pos:1,color:'#FFF200'}
+  ]
+};
+const GRAD_MAX_STOPS=8,GRAD_MIN_STOPS=2,GRAD_SIZE=256;
+
+const buildGradientTexture=()=>{
+  const off=document.createElement('canvas');
+  off.width=off.height=GRAD_SIZE;
+  const octx=off.getContext('2d');
+  const sorted=[...gradState.stops].sort((a,b)=>a.pos-b.pos);
+  let grad;
+  if(gradState.type==='radial'){
+    grad=octx.createRadialGradient(GRAD_SIZE/2,GRAD_SIZE/2,0,GRAD_SIZE/2,GRAD_SIZE/2,GRAD_SIZE/2);
+  }else if(gradState.type==='angular'&&octx.createConicGradient){
+    grad=octx.createConicGradient(gradState.angle*Math.PI/180,GRAD_SIZE/2,GRAD_SIZE/2);
+  }else{
+    const rad=gradState.angle*Math.PI/180;
+    const x1=GRAD_SIZE/2-Math.cos(rad)*GRAD_SIZE/2,y1=GRAD_SIZE/2-Math.sin(rad)*GRAD_SIZE/2;
+    const x2=GRAD_SIZE/2+Math.cos(rad)*GRAD_SIZE/2,y2=GRAD_SIZE/2+Math.sin(rad)*GRAD_SIZE/2;
+    grad=octx.createLinearGradient(x1,y1,x2,y2);
+  }
+  for(const s of sorted) grad.addColorStop(clamp(s.pos,0,1),s.color);
+  octx.fillStyle=grad;
+  octx.fillRect(0,0,GRAD_SIZE,GRAD_SIZE);
+  state.texture={
+    w:GRAD_SIZE,h:GRAD_SIZE,
+    data:octx.getImageData(0,0,GRAD_SIZE,GRAD_SIZE).data
+  };
+  state.textureKind='gradient';
+  texInput.value='';
+  texInfo.textContent='gradient ('+gradState.type+', '+gradState.stops.length+' colors) — mapped to '+state.shape;
+  rebuildShape();
+};
+
+const gradStopsEl=document.getElementById('gradStops');
+const gradAddBtn=document.getElementById('gradAddStop');
+const gradStopRowHTML=(s,i)=>`<div class="row" data-gsi="${i}">
+    <label>color ${i+1}</label>
+    <input type="color" class="grad-color" data-i="${i}" value="${s.color}">
+    <input type="range" class="grad-pos" data-i="${i}" min="0" max="1" step="0.01" value="${s.pos}">
+    <span class="val" data-gvi="${i}">${s.pos.toFixed(2)}</span>
+    <button class="grad-del" data-i="${i}" title="remove color">&times;</button>
+  </div>`;
+const buildGradStopsUI=()=>{
+  gradStopsEl.innerHTML=gradState.stops.map(gradStopRowHTML).join('');
+  gradAddBtn.disabled=gradState.stops.length>=GRAD_MAX_STOPS;
+};
+buildGradStopsUI();
+
+gradStopsEl.addEventListener('input',e=>{
+  const t=e.target,i=+t.dataset.i,s=gradState.stops[i];
+  if(!s) return;
+  if(t.classList.contains('grad-color')){
+    s.color=t.value;
+    buildGradientTexture();
+  }else if(t.classList.contains('grad-pos')){
+    s.pos=+t.value;
+    const span=gradStopsEl.querySelector('.val[data-gvi="'+i+'"]');
+    if(span) span.textContent=s.pos.toFixed(2);
+    buildGradientTexture();
+  }
+});
+gradStopsEl.addEventListener('click',e=>{
+  const b=e.target.closest?e.target.closest('.grad-del'):null;
+  if(!b) return;
+  if(gradState.stops.length<=GRAD_MIN_STOPS) return;
+  gradState.stops.splice(+b.dataset.i,1);
+  buildGradStopsUI();
+  buildGradientTexture();
+});
+gradAddBtn.addEventListener('click',()=>{
+  if(gradState.stops.length>=GRAD_MAX_STOPS) return;
+  const last=gradState.stops[gradState.stops.length-1];
+  const swatch=MS_PAINT_COLORS[(gradState.stops.length*3)%MS_PAINT_COLORS.length];
+  gradState.stops.push({pos:clamp((last?last.pos:1)+.2,0,1),color:swatch});
+  buildGradStopsUI();
+  buildGradientTexture();
+});
+document.getElementById('gradApply').addEventListener('click',buildGradientTexture);
+document.getElementById('gradType').addEventListener('change',e=>{
+  gradState.type=e.target.value;
+  document.getElementById('gradAngleRow').style.display=gradState.type==='radial'?'none':'';
+  buildGradientTexture();
+});
+document.getElementById('gradAngle').addEventListener('input',e=>{
+  gradState.angle=+e.target.value;
+  document.getElementById('gradAngleVal').textContent=e.target.value;
+  buildGradientTexture();
+});
+
+/* ==================== MESH IMPORT (STL / OBJ -> VOXELS) ====================
+   Parses a triangle mesh, centers + scales it to fit the voxel grid, then fills it solid with a
+   per-column (x,z) ray-cast: for every grid column, find where the mesh's triangles cross that
+   vertical line, sort the crossing heights and mark every voxel between paired crossings (even/odd
+   rule) as solid. Surface normals are approximated from the occupancy grid itself (a finite
+   difference of the solid/empty field), since there is no analytic surface formula for an arbitrary
+   mesh. The result always renders as one flat color — texture and gradient mapping need real UV
+   coordinates, which an arbitrary imported mesh doesn't have. */
+const VOX_TARGET_RADIUS=80,MESH_MAX_TRIS=150000;
+
+const parseSTLBuffer=buffer=>{
+  const byteLength=buffer.byteLength;
+  if(byteLength>=84){
+    const dv=new DataView(buffer);
+    const triCount=dv.getUint32(80,true);
+    if(84+triCount*50===byteLength&&triCount>0){
+      const tris=[];
+      let offset=84;
+      for(let i=0;i<triCount;i++){
+        offset+=12; // skip the stored facet normal, it's recomputed from the voxel grid anyway
+        const v=[];
+        for(let k=0;k<3;k++){
+          const x=dv.getFloat32(offset,true);offset+=4;
+          const y=dv.getFloat32(offset,true);offset+=4;
+          const z=dv.getFloat32(offset,true);offset+=4;
+          v.push({x,y,z});
+        }
+        offset+=2; // attribute byte count
+        tris.push(v);
+      }
+      return tris;
+    }
+  }
+  const text=new TextDecoder().decode(buffer);
+  const tris=[];
+  const vertRe=/vertex\s+([-\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)/g;
+  let m,cur=[];
+  while((m=vertRe.exec(text))){
+    cur.push({x:+m[1],y:+m[2],z:+m[3]});
+    if(cur.length===3){tris.push(cur);cur=[];}
+  }
+  if(!tris.length) throw new Error('no triangles found in this stl file');
+  return tris;
+};
+
+const parseMTLText=text=>{
+  const mats={}; let cur=null;
+  for(const raw of text.split(/\r?\n/)){const line=raw.trim();if(!line||line[0]==='#')continue;const p=line.split(/\s+/),k=p[0].toLowerCase();
+    if(k==='newmtl'&&p[1]){cur={name:p.slice(1).join(' '),kd:[1,1,1],ks:[.04,.04,.04],ns:32,d:1};mats[cur.name]=cur;continue;}
+    if(!cur)continue;
+    if(k==='kd'&&p.length>=4)cur.kd=p.slice(1,4).map(Number).map(v=>Number.isFinite(v)?clamp(v,0,1):1);
+    else if(k==='ks'&&p.length>=4)cur.ks=p.slice(1,4).map(Number);
+    else if(k==='ns'&&p[1])cur.ns=+p[1]||32;
+    else if((k==='d'||k==='tr')&&p[1])cur.d=clamp(k==='tr'?1-(+p[1]||0):(+p[1]||0),0,1);
+  } return mats;
+};
+const mtlColor=m=>m&&m.kd?('#'+m.kd.map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('')):state.color;
+
+const parseOBJText=(text,materials={})=>{
+  const verts=[],tris=[]; let activeMat=null,mtllib='';
+  for(const raw of text.split(/\r?\n/)){const line=raw.trim();if(!line||line[0]==='#')continue;const p=line.split(/\s+/),k=p[0].toLowerCase();
+    if(k==='mtllib')mtllib=p.slice(1).join(' ');
+    else if(k==='v'&&p.length>=4)verts.push({x:+p[1],y:+p[2],z:+p[3]});
+    else if(k==='usemtl')activeMat=p.slice(1).join(' ');
+    else if(k==='f'){const idx=p.slice(1).map(t=>{let i=parseInt(t.split('/')[0],10);if(!Number.isFinite(i))return -1;if(i<0)i=verts.length+1+i;return i-1;}).filter(i=>i>=0&&i<verts.length);for(let i=1;i<idx.length-1;i++){const a=verts[idx[0]],b=verts[idx[i]],c=verts[idx[i+1]];if(a&&b&&c)tris.push([a,b,c,{name:activeMat,color:mtlColor(materials[activeMat])}]);}}
+  } if(!tris.length)throw new Error('no faces found in this obj file'); return{verts,tris,mtllib};
+};
+
+/* centers + uniformly scales the mesh (in place) so its largest half-extent becomes VOX_TARGET_RADIUS,
+   matching the scale the procedural shapes use. zUp swaps y/z first, for models exported z-up. */
+const centerScaleVerts=(verts,zUp)=>{
+  let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;
+  for(const v of verts){
+    let x=v.x,y=v.y,z=v.z;
+    if(zUp){const ny=z,nz=-y;y=ny;z=nz;}
+    v.x=x;v.y=y;v.z=z;
+    if(x<minX)minX=x;if(x>maxX)maxX=x;
+    if(y<minY)minY=y;if(y>maxY)maxY=y;
+    if(z<minZ)minZ=z;if(z>maxZ)maxZ=z;
+  }
+  const cx=(minX+maxX)/2,cy=(minY+maxY)/2,cz=(minZ+maxZ)/2;
+  const ex=(maxX-minX)/2,ey=(maxY-minY)/2,ez=(maxZ-minZ)/2;
+  const maxExt=Math.max(ex,ey,ez)||1;
+  const scale=VOX_TARGET_RADIUS/maxExt;
+  for(const v of verts){
+    v.x=(v.x-cx)*scale;
+    v.y=(v.y-cy)*scale;
+    v.z=(v.z-cz)*scale;
+  }
+};
+
+/* solid fill via per-column ray casting, using a bucket grid so each column only tests
+   the triangles that could actually cross it */
+const voxelizeMesh=tris=>{
+  const N=GRID,idx=(x,y,z)=>(x*N+y)*N+z;
+  const occ=new Uint8Array(N*N*N);
+  const buckets=new Array(N*N);
+  const bIdx=(ix,iz)=>ix*N+iz;
+  tris.forEach((t,ti)=>{
+    let minXi=Infinity,maxXi=-Infinity,minZi=Infinity,maxZi=-Infinity;
+    for(const v of t){
+      const gx=v.x+CEN,gz=v.z+CEN;
+      if(gx<minXi)minXi=gx;if(gx>maxXi)maxXi=gx;
+      if(gz<minZi)minZi=gz;if(gz>maxZi)maxZi=gz;
+    }
+    const ix0=Math.max(0,Math.floor(minXi)),ix1=Math.min(N-1,Math.ceil(maxXi));
+    const iz0=Math.max(0,Math.floor(minZi)),iz1=Math.min(N-1,Math.ceil(maxZi));
+    for(let ix=ix0;ix<=ix1;ix++)for(let iz=iz0;iz<=iz1;iz++){
+      const bi=bIdx(ix,iz);
+      (buckets[bi]||(buckets[bi]=[])).push(ti);
+    }
+  });
+  const crossings=[];
+  for(let ix=0;ix<N;ix++){
+    const s=ix-CEN;
+    for(let iz=0;iz<N;iz++){
+      const cand=buckets[bIdx(ix,iz)];
+      if(!cand||!cand.length) continue;
+      const u=iz-CEN;
+      crossings.length=0;
+      for(const ti of cand){
+        const [p0,p1,p2]=tris[ti];
+        const denom=(p1.z-p2.z)*(p0.x-p2.x)+(p2.x-p1.x)*(p0.z-p2.z);
+        if(Math.abs(denom)<1e-9) continue;
+        const a=((p1.z-p2.z)*(s-p2.x)+(p2.x-p1.x)*(u-p2.z))/denom;
+        const b=((p2.z-p0.z)*(s-p2.x)+(p0.x-p2.x)*(u-p2.z))/denom;
+        const c=1-a-b;
+        if(a<-1e-6||b<-1e-6||c<-1e-6) continue;
+        crossings.push(a*p0.y+b*p1.y+c*p2.y);
+      }
+      if(crossings.length<2) continue;
+      crossings.sort((a,b)=>a-b);
+      /* shared edges between adjacent triangles can double-register a crossing at (almost) the
+         same height; collapse matching near-duplicate values down to one so parity stays correct */
+      const list=[];
+      for(const cval of crossings){
+        if(list.length&&Math.abs(cval-list[list.length-1])<1e-4) continue;
+        list.push(cval);
+      }
+      const n=list.length-(list.length%2);
+      for(let k=0;k<n;k+=2){
+        const lo=Math.max(0,Math.ceil(list[k]+CEN-1e-6));
+        const hi=Math.min(N-1,Math.floor(list[k+1]+CEN+1e-6));
+        for(let iy=lo;iy<=hi;iy++) occ[idx(ix,iy,iz)]=1;
+      }
+    }
+  }
+  return occ;
+};
+
+/* samples points directly off the mesh's true triangles (stratified within each triangle,
+   density proportional to its area) instead of filling a voxel grid — so the result sits exactly
+   on the real surface with no lattice stair-stepping, and open/non-watertight meshes work fine too
+   since there's no inside/outside test. A point budget keeps very detailed meshes from over-sampling. */
+const MESH_POINT_BUDGET=260000;
+const sampleMeshSurface=tris=>{
+  const areas=new Array(tris.length),normals=new Array(tris.length);
+  let totalArea=0;
+  for(let i=0;i<tris.length;i++){
+    const[p0,p1,p2]=tris[i];
+    const e1x=p1.x-p0.x,e1y=p1.y-p0.y,e1z=p1.z-p0.z;
+    const e2x=p2.x-p0.x,e2y=p2.y-p0.y,e2z=p2.z-p0.z;
+    const cx=e1y*e2z-e1z*e2y,cy=e1z*e2x-e1x*e2z,cz=e1x*e2y-e1y*e2x;
+    const clen=Math.hypot(cx,cy,cz),area=clen*.5;
+    areas[i]=area;totalArea+=area;
+    normals[i]=clen>1e-9?{x:cx/clen,y:cy/clen,z:cz/clen}:{x:0,y:1,z:0};
+  }
+  const pitch=Math.max(SURFACE_PITCH,Math.sqrt(totalArea/MESH_POINT_BUDGET));
+  const dots=[];
+  for(let i=0;i<tris.length;i++){
+    const area=areas[i];
+    if(area<1e-9) continue;
+    const[p0,p1,p2,tmeta]=tris[i],n=normals[i];
+    const count=Math.max(1,Math.round(area/(pitch*pitch)));
+    for(let k=0;k<count;k++){
+      let r1=Math.random(),r2=Math.random();
+      if(r1+r2>1){r1=1-r1;r2=1-r2;}
+      const r0=1-r1-r2;
+      const x=r0*p0.x+r1*p1.x+r2*p2.x;
+      const y=r0*p0.y+r1*p1.y+r2*p2.y;
+      const z=r0*p0.z+r1*p1.z+r2*p2.z;
+      dots.push({x:x+CEN,y:y+CEN,z:z+CEN,nx:n.x,ny:n.y,nz:n.z,color:tmeta&&tmeta.color?tmeta.color:state.color,material:tmeta&&tmeta.name||''});
+    }
+  }
+  return dots;
+};
+
+/* approximate surface normals from the occupancy field itself: the outward direction is where
+   the solid/empty field decreases fastest, i.e. -gradient(occupied) — still used for the
+   extruded letter shape below, which fills a voxel grid rather than sampling true triangles */
+const occToMeshDots=occ=>{
+  const N=GRID,idx=(x,y,z)=>(x*N+y)*N+z,dots=[];
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++)for(let z=0;z<N;z++){
+    if(!occ[idx(x,y,z)]) continue;
+    const gx1=x>0?occ[idx(x-1,y,z)]:0,gx2=x<N-1?occ[idx(x+1,y,z)]:0;
+    const gy1=y>0?occ[idx(x,y-1,z)]:0,gy2=y<N-1?occ[idx(x,y+1,z)]:0;
+    const gz1=z>0?occ[idx(x,y,z-1)]:0,gz2=z<N-1?occ[idx(x,y,z+1)]:0;
+    let nx=gx1-gx2,ny=gy1-gy2,nz=gz1-gz2;
+    const len=Math.hypot(nx,ny,nz);
+    if(len<1e-6){nx=0;ny=1;nz=0;}else{nx/=len;ny/=len;nz/=len;}
+    dots.push({x,y,z,nx,ny,nz});
+  }
+  return dots;
+};
+
+const meshMsg=document.getElementById('meshMsg');
+const meshInput=document.getElementById('meshInput');
+const meshZUp=document.getElementById('meshZUp');
+const meshShapeOption=document.getElementById('meshShapeOption');
+const animName=document.getElementById('animName');
+const animMax=document.getElementById('animMax');
+const animAddFiles=document.getElementById('animAddFiles');
+const animFiles=document.getElementById('animFiles');
+const animAddFrame=document.getElementById('animAddFrame');
+const animRemoveFrame=document.getElementById('animRemoveFrame');
+const animClearFrames=document.getElementById('animClearFrames');
+const animFrameFiles=document.getElementById('animFrameFiles');
+const animFrameList=document.getElementById('animFrameList');
+const animationFrameEntries=[];
+const animPlay=document.getElementById('animPlay');
+const animPrev=document.getElementById('animPrev');
+const animNext=document.getElementById('animNext');
+const animFps=document.getElementById('animFps');
+const animFpsVal=document.getElementById('animFpsVal');
+const animLoop=document.getElementById('animLoop');
+const animFrame=document.getElementById('animFrame');
+const animFrameVal=document.getElementById('animFrameVal');
+let pendingOBJ=null;
+let pendingOBJName='';
+
+state.animationFrames=[];
+state.animationIndex=0;
+state.animationPlaying=false;
+state.animationFps=12;
+state.animationLoop=true;
+let animationLastTime=0;
+const animationFiles=new Map();
+
+const animationBaseName=name=>String(name||'').replace(/\\/g,'/').split('/').pop().replace(/\.[^.]+$/,'').toLowerCase();
+const animationPrefix=()=>{
+  let n=(animName.value||'').trim().replace(/\.[^.]+$/,'').replace(/_+$/,'');
+  return n.toLowerCase();
+};
+const animationFileKey=(prefix,num,ext)=>prefix+'_'+num+'.'+ext;
+
+let animationLoadToken=0;
+let animationLoading=false;
+
+const filePath=f=>f?String(f.webkitRelativePath||f._animationRelativePath||f.name||'').replace(/\\/g,'/'):'';
+const fileName=f=>filePath(f).split('/').pop();
+const normalPath=p=>String(p||'').replace(/\\/g,'/').replace(/^\.\//,'').toLowerCase();
+
+const findMtlForObj=(obj,mtlFiles,allFiles)=>{
+  const objPath=filePath(obj);
+  const objDir=objPath.includes('/')?objPath.slice(0,objPath.lastIndexOf('/')+1):'';
+  const textHint=obj._text||'';
+  let declared='';
+  for(const raw of textHint.split(/\r?\n/)){
+    const line=raw.trim();
+    if(/^mtllib\s+/i.test(line)){ declared=line.replace(/^mtllib\s+/i,'').trim().split(/\s+/)[0]; break; }
+  }
+  if(declared){
+    const exact=normalPath(objDir+declared);
+    const byPath=allFiles.find(f=>normalPath(filePath(f))===exact);
+    if(byPath)return byPath;
+    const byName=mtlFiles.find(f=>fileName(f).toLowerCase()===declared.toLowerCase());
+    if(byName)return byName;
+  }
+  const objBase=animationBaseName(fileName(obj));
+  const sameBase=mtlFiles.find(f=>animationBaseName(fileName(f))===objBase);
+  if(sameBase)return sameBase;
+  return mtlFiles.length===1?mtlFiles[0]:null;
+};
+
+const setAnimationFrame=async(index,force=false)=>{
+  if(!state.animationFrames.length)return;
+  const available=state.animationFrames.map((_,i)=>i);
+  let pos=state.animationLoop?((index%available.length)+available.length)%available.length:clamp(index,0,available.length-1);
+  if(!force&&pos===state.animationIndex)return;
+  const fr=state.animationFrames[pos];
+  if(!fr)return;
+  state.animationIndex=pos;
+  state.meshDots=fr.dots;
+  state.meshMaterials=fr.materials||{};
+  state.meshMtlName=fr.mtlName||'';
+  state.meshRadius=VOX_TARGET_RADIUS;
+  state.texture=null;state.textureKind=null;texInput.value='';texInfo.textContent='';
+  if(state.shape!=='mesh'){state.shape='mesh';shapeSelect.value='mesh';}
+  meshShapeOption.disabled=false;
+  rebuildShape();
+  animFrame.max=String(Math.max(0,available.length-1));
+  animFrame.value=String(pos);
+  animFrameVal.textContent=(pos+1)+' / '+available.length;
+  meshMsg.textContent='frame '+(pos+1)+' / '+available.length+' — '+fr.name;
+};
+const clearAnimation=()=>{
+  ++animationLoadToken;
+  state.animationFrames=[];state.animationIndex=0;state.animationPlaying=false;animationLastTime=0;
+  animationLoading=false;
+  animPlay.textContent='play';animFrame.max='0';animFrame.value='0';animFrameVal.textContent='0 / 0';
+};
+const importOBJFrame=async(file,materials={})=>{
+  const parsed=parseOBJText(await file.text(),materials),triList=parsed.tris,uniqueVerts=parsed.verts;
+  if(triList.length>MESH_MAX_TRIS)throw new Error(file.name+' has '+triList.length+' triangles — try a simpler model (up to '+MESH_MAX_TRIS+')');
+  centerScaleVerts(uniqueVerts,meshZUp.checked);await new Promise(r=>setTimeout(r,0));
+  const dots=sampleMeshSurface(triList);if(!dots.length)throw new Error(file.name+': surface sampling produced no points');
+  return {name:file.name,dots,materials,mtlName:''};
+};
+const importOBJWithMaterials=async(file,materials={})=>{
+  meshMsg.textContent='sampling '+file.name+'…';
+  const fr=await importOBJFrame(file,materials);
+  state.meshDots=fr.dots;state.meshRadius=VOX_TARGET_RADIUS;state.meshMaterials=materials;state.meshMtlName=pendingOBJName;
+  state.texture=null;state.textureKind=null;texInput.value='';texInfo.textContent='';
+  clearAnimation();
+  meshShapeOption.disabled=false;state.shape='mesh';shapeSelect.value='mesh';rebuildShape();
+  meshMsg.textContent='loaded '+file.name+' — '+fr.dots.length+' points'+(Object.keys(materials).length?' · MTL colours applied':'');
+};
+
+const rebuildAnimation=async()=>{
+  if(!animationFiles.size)throw new Error('no animation files selected');
+  const objs=[...animationFiles.values()].filter(f=>/\.obj$/i.test(fileName(f))).sort((a,b)=>fileName(a).localeCompare(fileName(b),undefined,{numeric:true,sensitivity:'base'}));
+  const mtls=[...animationFiles.values()].filter(f=>/\.mtl$/i.test(fileName(f)));
+  if(!objs.length)throw new Error('no OBJ files found in the selected folder');
+  const frames=[];
+  for(let i=0;i<objs.length;i++){
+    const obj=objs[i];
+    meshMsg.textContent='reading frame '+(i+1)+' / '+objs.length+' — '+fileName(obj);
+    const objText=await obj.text();
+    obj._text=objText;
+    const mtl=findMtlForObj(obj,mtls,[...animationFiles.values()]);
+    let mats={};
+    if(mtl){
+      meshMsg.textContent='loading MTL — '+fileName(mtl);
+      mats=parseMTLText(await mtl.text());
+    } else {
+      meshMsg.textContent='no matching MTL for '+fileName(obj)+' — loading OBJ';
+    }
+    meshMsg.textContent='sampling frame '+(i+1)+' / '+objs.length+' — '+fileName(obj);
+    const parsed=parseOBJText(objText,mats),triList=parsed.tris,uniqueVerts=parsed.verts;
+    if(triList.length>MESH_MAX_TRIS)throw new Error(fileName(obj)+' has '+triList.length+' triangles — try a simpler model (up to '+MESH_MAX_TRIS+')');
+    centerScaleVerts(uniqueVerts,meshZUp.checked);await new Promise(r=>setTimeout(r,0));
+    const dots=sampleMeshSurface(triList);if(!dots.length)throw new Error(fileName(obj)+': surface sampling produced no points');
+    frames.push({name:fileName(obj),dots,materials:mats,mtlName:fileName(mtl)});
+  }
+  state.animationFrames=frames;state.animationIndex=0;state.animationPlaying=false;state.animationFps=+animFps.value||12;state.animationLoop=animLoop.checked;
+  animFrame.max=String(Math.max(0,frames.length-1));animFrame.value='0';animFrameVal.textContent='1 / '+frames.length;animPlay.textContent='play';
+  meshShapeOption.disabled=false;state.shape='mesh';shapeSelect.value='mesh';
+  await setAnimationFrame(0,true);
+  const materialCount=frames.filter(f=>f.mtlName).length;
+  meshMsg.textContent='animation loaded — '+frames.length+' OBJ frame'+(frames.length===1?'':'s')+(materialCount?' · '+materialCount+' MTL file'+(materialCount===1?'':'s')+' loaded':' · OBJ geometry loaded');
+};
+
+const renderAnimationFrameList=()=>{
+  animFrameList.innerHTML='';
+  animationFrameEntries.forEach((fr,i)=>{
+    const opt=document.createElement('option');
+    opt.value=String(i);
+    opt.textContent=(i+1)+'. '+fileName(fr.obj)+(fr.mtl?'  ·  '+fileName(fr.mtl):'  ·  no mtl');
+    animFrameList.appendChild(opt);
+  });
+  if(animationFrameEntries.length){
+    animFrameList.selectedIndex=Math.max(0,Math.min(state.animationIndex,animationFrameEntries.length-1));
+    animMax.value=String(animationFrameEntries.length);
+  }
+};
+const rebuildAnimationFromFrameList=async()=>{
+  animationFiles.clear();
+  animationFrameEntries.forEach((fr,i)=>{
+    if(fr.obj)animationFiles.set('frame/'+i+'/'+filePath(fr.obj).toLowerCase(),fr.obj);
+    if(fr.mtl)animationFiles.set('frame/'+i+'/'+filePath(fr.mtl).toLowerCase(),fr.mtl);
+  });
+  if(!animationFrameEntries.length)throw new Error('no animation frames added');
+  const frames=[];
+  const token=++animationLoadToken;
+  animationLoading=true;
+  try{
+    for(let i=0;i<animationFrameEntries.length;i++){
+      if(token!==animationLoadToken)return;
+      const entry=animationFrameEntries[i],obj=entry.obj,mtl=entry.mtl;
+      if(!obj)throw new Error('frame '+(i+1)+' has no OBJ');
+      meshMsg.textContent='reading frame '+(i+1)+' / '+animationFrameEntries.length+' — '+fileName(obj);
+      const objText=await obj.text(); obj._text=objText;
+      let mats={};
+      if(mtl){meshMsg.textContent='loading MTL — '+fileName(mtl);mats=parseMTLText(await mtl.text());}
+      meshMsg.textContent='sampling frame '+(i+1)+' / '+animationFrameEntries.length+' — '+fileName(obj);
+      const parsed=parseOBJText(objText,mats),triList=parsed.tris,uniqueVerts=parsed.verts;
+      if(triList.length>MESH_MAX_TRIS)throw new Error(fileName(obj)+' has '+triList.length+' triangles — try a simpler model (up to '+MESH_MAX_TRIS+')');
+      centerScaleVerts(uniqueVerts,meshZUp.checked);await new Promise(r=>setTimeout(r,0));
+      const dots=sampleMeshSurface(triList);
+      if(!dots.length)throw new Error(fileName(obj)+': surface sampling produced no points');
+      frames.push({name:fileName(obj),dots,materials:mats,mtlName:mtl?fileName(mtl):''});
+    }
+    state.animationFrames=frames;state.animationIndex=0;state.animationPlaying=false;state.animationFps=+animFps.value||12;state.animationLoop=animLoop.checked;
+    animFrame.max=String(Math.max(0,frames.length-1));animFrame.value='0';animFrameVal.textContent='1 / '+frames.length;animPlay.textContent='play';
+    meshShapeOption.disabled=false;state.shape='mesh';shapeSelect.value='mesh';
+    await setAnimationFrame(0,true);
+    meshMsg.textContent='animation loaded — '+frames.length+' frame'+(frames.length===1?'':'s')+' from list';
+  }finally{animationLoading=false;}
+};
+
+animAddFrame.addEventListener('click',()=>animFrameFiles.click());
+animFrameFiles.addEventListener('change',async e=>{
+  try{
+    const files=[...e.target.files];
+    const obj=files.find(f=>/\.obj$/i.test(f.name));
+    const mtl=files.find(f=>/\.mtl$/i.test(f.name));
+    if(!obj)throw new Error('choose an OBJ file for the frame');
+    animationFrameEntries.push({obj,mtl:mtl||null});
+    renderAnimationFrameList();
+    await rebuildAnimationFromFrameList();
+  }catch(err){meshMsg.textContent='error: '+(err&&err.message?err.message:String(err));}
+  finally{animFrameFiles.value='';}
+});
+animRemoveFrame.addEventListener('click',async()=>{
+  const i=animFrameList.selectedIndex;if(i<0||i>=animationFrameEntries.length)return;
+  animationFrameEntries.splice(i,1);renderAnimationFrameList();
+  if(animationFrameEntries.length){try{await rebuildAnimationFromFrameList();}catch(err){meshMsg.textContent='error: '+err.message;}}else clearAnimation();
+});
+animClearFrames.addEventListener('click',()=>{animationFrameEntries.length=0;renderAnimationFrameList();clearAnimation();meshMsg.textContent='frame list cleared';});
+
+const addAnimationFiles=files=>{
+  animationFiles.clear();
+  for(const f of files){
+    if(/\.(obj|mtl)$/i.test(fileName(f))) animationFiles.set(filePath(f).toLowerCase(),f);
+  }
+  const objs=[...animationFiles.values()].filter(f=>/\.obj$/i.test(fileName(f)));
+  if(objs.length){
+    const nums=objs.map(f=>{const m=fileName(f).match(/_(\d+)\.obj$/i);return m?+m[1]:null;}).filter(n=>n!==null).sort((a,b)=>a-b);
+    if(nums.length)animMax.value=String(Math.max(...nums));
+    const first=fileName(objs.slice().sort((a,b)=>fileName(a).localeCompare(fileName(b),undefined,{numeric:true}))[0]);
+    const m=first.match(/^(.+)_\d+\.obj$/i);
+    if(m&&!animName.value.trim())animName.value=m[1];
+  }
+  return animationFiles.size;
+};
+
+const importMeshFile=async file=>{
+  const ext=file.name.split('.').pop().toLowerCase();
+  if(ext==='obj'){pendingOBJ=file;pendingOBJName='';await importOBJWithMaterials(file,state.meshMaterials||{});pendingOBJ=null;return;}
+  if(ext!=='stl')throw new Error('unsupported file type — use .stl or .obj');
+  clearAnimation();
+  const triList=parseSTLBuffer(await file.arrayBuffer()),uniqueVerts=triList.flat();if(triList.length>MESH_MAX_TRIS)throw new Error('mesh has '+triList.length+' triangles — try a simpler model');
+  centerScaleVerts(uniqueVerts,meshZUp.checked);const dots=sampleMeshSurface(triList).map(d=>({...d,color:state.color}));if(!dots.length)throw new Error('surface sampling produced no points');
+  state.meshDots=dots;state.meshRadius=VOX_TARGET_RADIUS;state.meshMaterials={};state.meshMtlName='';state.texture=null;state.textureKind=null;texInput.value='';texInfo.textContent='';meshShapeOption.disabled=false;state.shape='mesh';shapeSelect.value='mesh';rebuildShape();meshMsg.textContent='loaded '+file.name+' — '+triList.length+' triangles → '+dots.length+' points';
+};
+
+meshInput.addEventListener('change',e=>{
+  const f=e.target.files[0];if(!f)return;
+  importMeshFile(f).catch(err=>{meshMsg.textContent='error: '+(err&&err.message?err.message:String(err));}).finally(()=>{meshInput.value='';});
+});
+const collectAnimationFolderFiles=async(dirHandle,basePath='',out=[])=>{
+  for await(const [name,handle] of dirHandle.entries()){
+    const rel=basePath?basePath+'/'+name:name;
+    if(handle.kind==='directory'){
+      await collectAnimationFolderFiles(handle,rel,out);
+    }else if(handle.kind==='file' && /\.(obj|mtl)$/i.test(name)){
+      const f=await handle.getFile();
+      // webkitRelativePath is read-only, so attach the folder-relative path used by our loader.
+      try{Object.defineProperty(f,'webkitRelativePath',{value:rel,configurable:true});}catch(e){f._animationRelativePath=rel;}
+      out.push(f);
+    }
+  }
+  return out;
+};
+
+const loadAnimationFiles=async files=>{
+  const list=[...files];
+  if(!list.length)throw new Error('no OBJ or MTL files found in the selected folder');
+  clearAnimation();
+  animationFrameEntries.length=0;
+  const objs=list.filter(f=>/\.obj$/i.test(fileName(f))).sort((a,b)=>fileName(a).localeCompare(fileName(b),undefined,{numeric:true,sensitivity:'base'}));
+  const mtls=list.filter(f=>/\.mtl$/i.test(fileName(f)));
+  if(!objs.length)throw new Error('no OBJ files found in the selected folder');
+  for(const obj of objs){
+    let mtl=null;
+    const base=animationBaseName(fileName(obj));
+    mtl=mtls.find(f=>animationBaseName(fileName(f))===base)|| (mtls.length===1?mtls[0]:null);
+    animationFrameEntries.push({obj,mtl});
+  }
+  renderAnimationFrameList();
+  meshMsg.textContent='found '+list.length+' OBJ/MTL file'+(list.length===1?'':'s')+' — loading…';
+  await rebuildAnimationFromFrameList();
+};
+
+animAddFiles.addEventListener('click',async()=>{
+  try{
+    if(typeof window.showDirectoryPicker==='function'){
+      const dir=await window.showDirectoryPicker({mode:'read'});
+      meshMsg.textContent='reading folder '+(dir.name||'')+'…';
+      const files=await collectAnimationFolderFiles(dir);
+      await loadAnimationFiles(files);
+      return;
+    }
+  }catch(err){
+    if(err&&err.name==='AbortError')return;
+    console.warn('folder picker API failed, using file-input fallback',err);
+  }
+  animFiles.click();
+});
+
+animFiles.addEventListener('change',async e=>{
+  const files=[...e.target.files];
+  if(!files.length)return;
+  try{
+    await loadAnimationFiles(files);
+  }catch(err){meshMsg.textContent='error: '+(err&&err.message?err.message:String(err));}
+  finally{animFiles.value='';}
+});
+animName.addEventListener('change',()=>{});
+animMax.addEventListener('change',()=>{ if(+animMax.value<1)animMax.value='1'; });
+animPlay.addEventListener('click',()=>{if(!animationFiles.size)return;state.animationPlaying=!state.animationPlaying;animationLastTime=performance.now();animPlay.textContent=state.animationPlaying?'pause':'play';});
+animPrev.addEventListener('click',async()=>{if(animationFiles.size&&!animationLoading)await setAnimationFrame(state.animationIndex-1,true);});
+animNext.addEventListener('click',async()=>{if(animationFiles.size&&!animationLoading)await setAnimationFrame(state.animationIndex+1,true);});
+animFps.addEventListener('input',()=>{state.animationFps=+animFps.value||12;animFpsVal.textContent=String(state.animationFps);});
+animLoop.addEventListener('change',()=>{state.animationLoop=animLoop.checked;});
+animFrame.addEventListener('input',async()=>{if(animationFiles.size&&!animationLoading)await setAnimationFrame(+animFrame.value,true);});
+
+document.getElementById('meshClear').addEventListener('click',()=>{
+  clearAnimation();state.meshDots=null;state.meshMaterials={};pendingOBJ=null;
+  meshShapeOption.disabled=true;meshMsg.textContent='';
+  if(state.shape==='mesh'){state.shape='sphere';shapeSelect.value='sphere';rebuildShape();}
+});
+
+/* ==================== TEXT / LETTER (RASTERIZE -> EXTRUDE -> VOXELS) ====================
+   Draws the typed character onto a GRID x GRID canvas with a bold sans-serif font, thresholds
+   the alpha channel into a flat 2D mask, then extrudes that mask along z into a solid occupancy
+   grid — the same shape occToMeshDots() (built for mesh import, above) already knows how to turn
+   into voxels with approximate surface normals. Single flat color only, like an imported mesh. */
+const textChar=document.getElementById('textChar');
+const textFont=document.getElementById('textFont');
+const textDepthEl=document.getElementById('textDepth');
+const textDepthVal=document.getElementById('textDepthVal');
+const textMsg=document.getElementById('textMsg');
+const textShapeOption=document.getElementById('textShapeOption');
+
+const buildTextShape=()=>{
+  const ch=(state.textChar||'').trim();
+  if(!ch){
+    state.textDots=null;
+    textShapeOption.disabled=true;
+    textMsg.textContent='';
+    if(state.shape==='text') rebuildShape();
+    return;
+  }
+  const N=GRID;
+  const off=document.createElement('canvas');off.width=off.height=N;
+  const octx=off.getContext('2d');
+  octx.clearRect(0,0,N,N);
+  octx.fillStyle='#fff';
+  const fontSize=Math.round(N*0.72);
+  const fontMap={
+    rounded:'700 '+fontSize+'px "Arial Rounded MT Bold", "Nunito", sans-serif',
+    fredoka:'600 '+fontSize+'px "Fredoka", sans-serif',
+    nunito:'800 '+fontSize+'px "Nunito", sans-serif',
+    quicksand:'700 '+fontSize+'px "Quicksand", sans-serif',
+    soft:'700 '+fontSize+'px "Trebuchet MS", "Nunito", sans-serif',
+    mono:'700 '+fontSize+'px monospace'
+  };
+  octx.font=fontMap[state.textFont||'rounded'];
+  octx.textAlign='center';octx.textBaseline='middle';
+  octx.fillText(ch,N/2,N/2);
+  const img=octx.getImageData(0,0,N,N).data;
+  const mask=new Uint8Array(N*N);
+  let any=false;
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    if(img[(y*N+x)*4+3]>128){mask[y*N+x]=1;any=true;}
+  }
+  if(!any){
+    state.textDots=null;
+    textShapeOption.disabled=true;
+    textMsg.textContent="couldn't render that character";
+    if(state.shape==='text') rebuildShape();
+    return;
+  }
+  const depth=state.textDepth,half=Math.round(depth/2);
+  const z0=Math.max(0,CEN-half),z1=Math.min(N-1,CEN+half);
+  const occ=new Uint8Array(N*N*N);
+  const idx=(x,y,z)=>(x*N+y)*N+z;
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    if(!mask[y*N+x]) continue;
+    for(let z=z0;z<=z1;z++) occ[idx(x,y,z)]=1;
+  }
+  const dots=occToMeshDots(occ);
+  if(!dots.length){
+    state.textDots=null;
+    textShapeOption.disabled=true;
+    textMsg.textContent="couldn't render that character";
+    if(state.shape==='text') rebuildShape();
+    return;
+  }
+  state.textDots=dots;
+  state.textRadius=N*0.36+half;
+  textShapeOption.disabled=false;
+  textMsg.textContent=dots.length+' voxels';
+  const enteringText=state.shape!=='text';
+  state.shape='text';
+  shapeSelect.value='text';
+  if(enteringText) setCameraRot(0,0,0);
+  rebuildShape();
+};
+
+textChar.addEventListener('input',()=>{
+  state.textChar=textChar.value.slice(0,1);
+  buildTextShape();
+});
+textFont.addEventListener('change',()=>{
+  state.textFont=textFont.value;
+  if(state.textChar) buildTextShape();
+});
+textDepthEl.addEventListener('input',()=>{
+  state.textDepth=+textDepthEl.value;
+  textDepthVal.textContent=textDepthEl.value;
+  if(state.textChar) buildTextShape();
+});
+
+document.getElementById('sampleRes').addEventListener('change',e=>{
+  state.sampleRes=+e.target.value;
+});
+
+const bind=(id,vid,prop,fmt)=>{
+  const el=document.getElementById(id),vel=document.getElementById(vid);
+  el.addEventListener('input',()=>{const v=+el.value;state[prop]=v;vel.textContent=fmt?fmt(v):v});
+};
+bind('camRotX','camRotXVal','rotX');
+bind('camRotY','camRotYVal','rotY');
+bind('camRotZ','camRotZVal','rotZ');
+bind('voxelOpacity','voxelOpacityVal','voxelOpacity',v=>v.toFixed(2));
+bind('phongPower','phongPowerVal','phongPower');
+bind('phongInten','phongIntenVal','phongInten',v=>v.toFixed(2));
+bind('phongOpacity','phongOpacityVal','phongOpacity',v=>v.toFixed(2));
+document.getElementById('principledOn').addEventListener('change',e=>{state.principledOn=e.target.checked});
+bind('prRough','prRoughVal','prRough',v=>v.toFixed(2));
+bind('prSpec','prSpecVal','prSpec',v=>v.toFixed(2));
+bind('prCoat','prCoatVal','prCoat',v=>v.toFixed(2));
+bind('prCoatGloss','prCoatGlossVal','prCoatGloss',v=>v.toFixed(2));
+bind('prSheen','prSheenVal','prSheen',v=>v.toFixed(2));
+bind('prSub','prSubVal','prSub',v=>v.toFixed(2));
+bind('prWrap','prWrapVal','prWrap',v=>v.toFixed(2));
+bind('bulletOpacity','bulletOpacityVal','bulletOpacity',v=>v.toFixed(2));
+bind('roughness','roughnessVal','roughness',v=>v.toFixed(2));
+bind('glassOpacity','glassOpacityVal','glassOpacity',v=>v.toFixed(2));
+bind('glassStrength','glassStrengthVal','glassStrength',v=>v.toFixed(2));
+bind('reflOpacity','reflOpacityVal','reflOpacity',v=>v.toFixed(2));
+bind('reflSky','reflSkyVal','reflSky',v=>v.toFixed(2));
+bind('reflHorizon','reflHorizonVal','reflHorizon',v=>v.toFixed(2));
+bind('reflShadow','reflShadowVal','reflShadow',v=>v.toFixed(2));
+bind('glowOpacity','glowOpacityVal','glowOpacity',v=>v.toFixed(2));
+bind('glowStrength','glowStrengthVal','glowStrength',v=>v.toFixed(2));
+bind('haloSize','haloSizeVal','haloSize');
+document.getElementById('glowMatch').addEventListener('change',e=>{state.glowMatch=e.target.checked});
+document.getElementById('glowColor').addEventListener('input',e=>{state.glowColor=e.target.value;state.glowMatch=false;document.getElementById('glowMatch').checked=false});
+bind('shadowOpacity','shadowOpacityVal','shadowOpacity',v=>v.toFixed(2));
+bind('shadowBlur','shadowBlurVal','shadowBlur',v=>v.toFixed(2));
+bind('shadowSharpness','shadowSharpnessVal','shadowSharpness',v=>v.toFixed(2));
+bind('colorBleed','colorBleedVal','colorBleed',v=>v.toFixed(2));
+bind('bleedSharpness','bleedSharpnessVal','bleedSharpness',v=>v.toFixed(2));
+bind('causticSharpness','causticSharpnessVal','causticSharpness',v=>v.toFixed(2));
+bind('fogAmount','fogAmountVal','fogAmount',v=>v.toFixed(2));
+document.getElementById('causticEnabled').addEventListener('change',e=>{state.causticOpacity=e.target.checked?.05:0});
+bind('postBrightness','postBrightnessVal','postBrightness',v=>v.toFixed(2));
+bind('postContrast','postContrastVal','postContrast',v=>v.toFixed(2));
+bind('frontOpacity','frontOpacityVal','frontOpacity',v=>v.toFixed(2));
+bind('backOpacity','backOpacityVal','backOpacity',v=>v.toFixed(2));
+bind('layerSplit','layerSplitVal','split');
+bind('lensBend','lensBendVal','lensBend',v=>v.toFixed(2));
+bind('lensDisp','lensDispVal','lensDisp',v=>v.toFixed(2));
+document.getElementById('spreadOn').addEventListener('change',e=>{state.spreadOn=e.target.checked});
+bind('spreadX','spreadXVal','spreadX');
+bind('spreadY','spreadYVal','spreadY');
+bind('spreadPasses','spreadPassesVal','spreadPasses');
+bind('spreadSeed','spreadSeedVal','spreadSeed');
+
+/* --- download the current frame ---
+   Uses the viewer's `downloads` capability when hosted (it asks the viewer to confirm the save).
+   Outside a host it falls back to a normal link download. */
+const saveBtn=document.getElementById('saveBtn'),saveMsg=document.getElementById('saveMsg');
+const renderProgress=document.getElementById('renderProgress');
+const renderProgressBar=document.getElementById('renderProgressBar');
+const renderProgressText=document.getElementById('renderProgressText');
+const setRenderProgress=(pct,label)=>{
+  renderProgress.classList.add('on');
+  renderProgressBar.style.width=Math.max(0,Math.min(100,pct))+'%';
+  renderProgressText.textContent=label||'';
+};
+const hideRenderProgress=()=>{
+  renderProgressBar.style.width='100%';
+  setTimeout(()=>{renderProgress.classList.remove('on');renderProgressText.textContent='';renderProgressBar.style.width='0%';},650);
+};
+const renderYield=()=>new Promise(r=>requestAnimationFrame(r));
+
+
+const exportGifBtn=document.getElementById('exportGifBtn');
+let gifWorkerURL=null;
+const getGIFWorkerURL=async()=>{
+  if(gifWorkerURL)return gifWorkerURL;
+  const urls=[
+    'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js'
+  ];
+  let lastErr=null;
+  for(const src of urls){
+    try{
+      const res=await fetch(src,{mode:'cors',cache:'force-cache'});
+      if(!res.ok)throw new Error('worker download failed: '+res.status);
+      const code=await res.text();
+      if(!code || code.length<1000)throw new Error('worker script was empty');
+      gifWorkerURL=URL.createObjectURL(new Blob([code],{type:'application/javascript'}));
+      return gifWorkerURL;
+    }catch(e){lastErr=e;}
+  }
+  throw lastErr||new Error('could not load gif worker');
+};
+
+const exportGIF=async()=>{
+  if(state.animationFrames.length<1){saveMsg.textContent='load an animation first';return;}
+  if(typeof GIF==='undefined'){saveMsg.textContent='gif encoder could not load — check internet connection';return;}
+  const wasPlaying=state.animationPlaying;
+  const oldIndex=state.animationIndex;
+  state.animationPlaying=false;
+  animPlay.textContent='play';
+  exportGifBtn.disabled=true;
+  saveBtn.disabled=true;
+  saveMsg.textContent='preparing gif…';
+  setRenderProgress(0,'preparing animation');
+  try{
+    const fps=Math.max(1,+animFps.value||12);
+    const delay=Math.round(1000/fps);
+    const total=state.animationFrames.length;
+    saveMsg.textContent='loading gif encoder…';
+    const workerURL=await getGIFWorkerURL();
+    const gif=new GIF({
+      workers:2,
+      quality:8,
+      width:CANVAS_SIZE,
+      height:CANVAS_SIZE,
+      workerScript:workerURL
+    });
+    for(let i=0;i<total;i++){
+      await setAnimationFrame(i,true);
+      await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+      gif.addFrame(canvas,{copy:true,delay});
+      setRenderProgress((i+1)/total*80,'capturing frame '+(i+1)+' / '+total);
+    }
+    setRenderProgress(82,'encoding gif…');
+    const blob=await new Promise((resolve,reject)=>{
+      gif.on('progress',p=>setRenderProgress(82+p*18,'encoding gif '+Math.round(p*100)+'%'));
+      gif.on('finished',resolve);
+      gif.on('error',reject);
+      gif.render();
+    });
+    const prefix=animationPrefix()||'animation';
+    const name=prefix+'-animation.gif';
+    let dl=null;
+    try{dl=(window.claude&&window.claude.use)?await window.claude.use('downloads'):null;}catch(e){dl=null;}
+    if(dl){
+      await dl.save({filename:name,data:blob});
+      saveMsg.textContent='saved '+name;
+    }else{
+      const url=URL.createObjectURL(blob),a=document.createElement('a');
+      a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),10000);
+      saveMsg.textContent='download started: '+name;
+    }
+  }catch(err){
+    console.error('GIF export failed',err);
+    saveMsg.textContent='could not export gif'+(err&&err.message?' — '+err.message:'');
+  }finally{
+    setAnimationFrame(oldIndex,true);
+    state.animationPlaying=wasPlaying;
+    animationLastTime=performance.now();
+    animPlay.textContent=state.animationPlaying?'pause':'play';
+    exportGifBtn.disabled=false;
+    saveBtn.disabled=false;
+    hideRenderProgress();
+  }
+};
+exportGifBtn.addEventListener('click',exportGIF);
+
+const saveImage=async()=>{
+  const isJpg=false,solid=false;
+  saveBtn.disabled=true;saveMsg.textContent='';
+  try{
+    /* rendering is synchronous inside each animation frame, so the canvas always holds a finished frame here */
+    let src=canvas;
+    if(solid){
+      src=document.createElement('canvas');src.width=src.height=CANVAS_SIZE;
+      const sc=src.getContext('2d');
+      sc.fillStyle='#fff';sc.fillRect(0,0,CANVAS_SIZE,CANVAS_SIZE);
+      sc.putImageData(ctx.getImageData(0,0,CANVAS_SIZE,CANVAS_SIZE),0,0);
+    }
+    const blob=await new Promise(res=>src.toBlob(res,isJpg?'image/jpeg':'image/png',.95));
+    if(!blob) throw {code:'bad_request'};
+    const name='inkymaker-'+state.shape+(isJpg?'.jpg':'.png');
+    let dl=null;
+    try{dl=(window.claude&&window.claude.use)?await window.claude.use('downloads'):null;}catch(e){dl=null;}
+    if(dl){
+      await dl.save({filename:name,data:blob});
+      saveMsg.textContent='saved '+name;
+    }else{
+      const url=URL.createObjectURL(blob),a=document.createElement('a');
+      a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),4000);
+      saveMsg.textContent='download started: '+name;
+    }
+  }catch(err){
+    const code=err&&err.code;
+    saveMsg.textContent=code==='declined'?'save cancelled'
+      :code==='rate_limited'?'a save prompt is already open — try again in a moment'
+      :'could not save the image here'+(code?' ('+code+')':'');
+  }finally{
+    saveBtn.disabled=false;
+  }
+};
+saveBtn.addEventListener('click',saveImage);
+
+/* ==================== SETTINGS SAVE / LOAD ====================
+   Serializes every slider/checkbox/select control, the light rig, and the active
+   texture (gradient config, or the current texture pixels as a PNG data URL) to JSON,
+   and can restore all of it — including rebuilding the lights and gradient-stop UI. */
+const SLIDER_BINDINGS=[
+  ['voxelOpacity','voxelOpacity','voxelOpacityVal',v=>v.toFixed(2)],
+  ['phongPower','phongPower','phongPowerVal',v=>String(Math.round(v))],
+  ['phongInten','phongInten','phongIntenVal',v=>v.toFixed(2)],
+  ['phongOpacity','phongOpacity','phongOpacityVal',v=>v.toFixed(2)],
+  ['prRough','prRough','prRoughVal',v=>v.toFixed(2)],
+  ['prSpec','prSpec','prSpecVal',v=>v.toFixed(2)],
+  ['prCoat','prCoat','prCoatVal',v=>v.toFixed(2)],
+  ['prCoatGloss','prCoatGloss','prCoatGlossVal',v=>v.toFixed(2)],
+  ['prSheen','prSheen','prSheenVal',v=>v.toFixed(2)],
+  ['prSub','prSub','prSubVal',v=>v.toFixed(2)],
+  ['prWrap','prWrap','prWrapVal',v=>v.toFixed(2)],
+  ['bulletOpacity','bulletOpacity','bulletOpacityVal',v=>v.toFixed(2)],
+  ['roughness','roughness','roughnessVal',v=>v.toFixed(2)],
+  ['glassOpacity','glassOpacity','glassOpacityVal',v=>v.toFixed(2)],
+  ['glassStrength','glassStrength','glassStrengthVal',v=>v.toFixed(2)],
+  ['reflOpacity','reflOpacity','reflOpacityVal',v=>v.toFixed(2)],
+  ['reflSky','reflSky','reflSkyVal',v=>v.toFixed(2)],
+  ['reflHorizon','reflHorizon','reflHorizonVal',v=>v.toFixed(2)],
+  ['reflShadow','reflShadow','reflShadowVal',v=>v.toFixed(2)],
+  ['glowOpacity','glowOpacity','glowOpacityVal',v=>v.toFixed(2)],
+  ['glowStrength','glowStrength','glowStrengthVal',v=>v.toFixed(2)],
+  ['haloSize','haloSize','haloSizeVal',v=>String(Math.round(v))],
+  ['shadowOpacity','shadowOpacity','shadowOpacityVal',v=>v.toFixed(2)],
+  ['shadowBlur','shadowBlur','shadowBlurVal',v=>v.toFixed(2)],
+  ['shadowSharpness','shadowSharpness','shadowSharpnessVal',v=>v.toFixed(2)],
+  ['colorBleed','colorBleed','colorBleedVal',v=>v.toFixed(2)],
+  ['bleedSharpness','bleedSharpness','bleedSharpnessVal',v=>v.toFixed(2)],
+  ['causticSharpness','causticSharpness','causticSharpnessVal',v=>v.toFixed(2)],
+  ['fogAmount','fogAmount','fogAmountVal',v=>v.toFixed(2)],
+  ['postBrightness','postBrightness','postBrightnessVal',v=>v.toFixed(2)],
+  ['postContrast','postContrast','postContrastVal',v=>v.toFixed(2)],
+  ['frontOpacity','frontOpacity','frontOpacityVal',v=>v.toFixed(2)],
+  ['backOpacity','backOpacity','backOpacityVal',v=>v.toFixed(2)],
+  ['layerSplit','split','layerSplitVal',v=>String(Math.round(v))],
+  ['lensBend','lensBend','lensBendVal',v=>v.toFixed(2)],
+  ['lensDisp','lensDisp','lensDispVal',v=>v.toFixed(2)],
+  ['spreadX','spreadX','spreadXVal',v=>String(Math.round(v))],
+  ['spreadY','spreadY','spreadYVal',v=>String(Math.round(v))],
+  ['spreadPasses','spreadPasses','spreadPassesVal',v=>String(Math.round(v))],
+  ['spreadSeed','spreadSeed','spreadSeedVal',v=>String(Math.round(v))]
+];
+
+/* current texture as a PNG data URL, regardless of whether it came from an upload or a gradient */
+const textureToDataURL=()=>{
+  const tex=state.texture;
+  if(!tex) return null;
+  const c=document.createElement('canvas');c.width=tex.w;c.height=tex.h;
+  const cc=c.getContext('2d');
+  cc.putImageData(new ImageData(new Uint8ClampedArray(tex.data),tex.w,tex.h),0,0);
+  return c.toDataURL('image/png');
+};
+
+const serializeSettings=()=>{
+  const sliders={};
+  for(const [id,prop] of SLIDER_BINDINGS) sliders[prop]=state[prop];
+  return{
+    app:'inkyMaker',version:1,
+    shape:state.shape,
+    color:state.color,
+    sampleRes:state.sampleRes,
+    causticOpacity:state.causticOpacity,
+    glowMatch:state.glowMatch,
+    glowColor:state.glowColor,
+    spreadOn:state.spreadOn,
+    principledOn:state.principledOn,
+    sliders,
+    lights:state.lights,
+    textureKind:state.textureKind||null,
+    gradient:gradState,
+    texture:textureToDataURL()
+  };
+};
+
+const restoreTextureFromDataURL=(dataURL,kind)=>new Promise((resolve,reject)=>{
+  const img=new Image();
+  img.onload=()=>{
+    const off=document.createElement('canvas');
+    off.width=img.width;off.height=img.height;
+    const oc=off.getContext('2d');
+    oc.drawImage(img,0,0);
+    state.texture={w:img.width,h:img.height,data:oc.getImageData(0,0,img.width,img.height).data};
+    state.textureKind=kind||'image';
+    texInput.value='';
+    texInfo.textContent=(kind==='gradient'?'gradient ('+gradState.type+', '+gradState.stops.length+' colors)':'loaded '+img.width+' x '+img.height)+' — mapped to '+state.shape;
+    rebuildShape();
+    resolve();
+  };
+  img.onerror=reject;
+  img.src=dataURL;
+});
+
+const applySettings=async(obj)=>{
+  if(!obj||typeof obj!=='object') throw new Error('not a settings file');
+  if(obj.shape&&SHAPES[obj.shape]){state.shape=obj.shape;shapeSelect.value=obj.shape;}
+  if(typeof obj.principledOn!=='undefined'){
+    state.principledOn=!!obj.principledOn;
+    document.getElementById('principledOn').checked=state.principledOn;
+  }
+  if(obj.sliders){
+    for(const [id,prop,vid,fmt] of SLIDER_BINDINGS){
+      if(!(prop in obj.sliders)) continue;
+      const v=+obj.sliders[prop];
+      state[prop]=v;
+      const el=document.getElementById(id),vel=document.getElementById(vid);
+      if(el) el.value=v;
+      if(vel) vel.textContent=fmt?fmt(v):v;
+    }
+  }
+  if(typeof obj.sampleRes!=='undefined'){
+    state.sampleRes=+obj.sampleRes;
+    document.getElementById('sampleRes').value=String(state.sampleRes);
+  }
+  if(typeof obj.causticOpacity!=='undefined'){
+    state.causticOpacity=+obj.causticOpacity;
+    document.getElementById('causticEnabled').checked=state.causticOpacity>0.001;
+  }
+  if(typeof obj.glowMatch!=='undefined'){
+    state.glowMatch=!!obj.glowMatch;
+    document.getElementById('glowMatch').checked=state.glowMatch;
+  }
+  if(obj.glowColor){
+    state.glowColor=obj.glowColor;
+    document.getElementById('glowColor').value=obj.glowColor;
+  }
+  if(typeof obj.spreadOn!=='undefined'){
+    state.spreadOn=!!obj.spreadOn;
+    document.getElementById('spreadOn').checked=state.spreadOn;
+  }
+  if(Array.isArray(obj.lights)&&obj.lights.length){
+    state.lights=obj.lights.map(l=>Object.assign({},LIGHT_DEFS[l.type]?LIGHT_DEFS[l.type].make():{},l));
+    buildLightUI();
+  }
+  if(obj.gradient&&Array.isArray(obj.gradient.stops)&&obj.gradient.stops.length>=2){
+    gradState.type=obj.gradient.type||'linear';
+    gradState.angle=typeof obj.gradient.angle==='number'?obj.gradient.angle:0;
+    gradState.stops=obj.gradient.stops.map(s=>({pos:clamp(+s.pos||0,0,1),color:s.color||'#ffffff'}));
+    document.getElementById('gradType').value=gradState.type;
+    document.getElementById('gradAngle').value=gradState.angle;
+    document.getElementById('gradAngleVal').textContent=gradState.angle;
+    document.getElementById('gradAngleRow').style.display=gradState.type==='radial'?'none':'';
+    buildGradStopsUI();
+  }
+  if(obj.texture){
+    await restoreTextureFromDataURL(obj.texture,obj.textureKind);
+    palette.querySelectorAll('.swatch').forEach(s=>s.classList.remove('selected'));
+  }else{
+    state.texture=null;state.textureKind=null;
+    texInput.value='';texInfo.textContent='';
+    if(obj.color){
+      state.color=obj.color;
+      palette.querySelectorAll('.swatch').forEach(s=>s.classList.toggle('selected',s.style.background===hexToCss(obj.color)));
+    }
+    rebuildShape();
+  }
+};
+/* browsers normalize inline style colors to rgb(); compare swatches that way */
+const hexToCss=hex=>{
+  const d=document.createElement('div');d.style.background=hex;return d.style.background;
+};
+
+const settingsMsg=document.getElementById('settingsMsg');
+document.getElementById('settingsExport').addEventListener('click',async()=>{
+  settingsMsg.textContent='';
+  try{
+    const json=JSON.stringify(serializeSettings(),null,2);
+    const blob=new Blob([json],{type:'application/json'});
+    const name='inkymaker-settings-'+state.shape+'.json';
+    let dl=null;
+    try{dl=(window.claude&&window.claude.use)?await window.claude.use('downloads'):null;}catch(e){dl=null;}
+    if(dl){
+      await dl.save({filename:name,data:blob});
+      settingsMsg.textContent='saved '+name;
+    }else{
+      const url=URL.createObjectURL(blob),a=document.createElement('a');
+      a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),4000);
+      settingsMsg.textContent='download started: '+name;
+    }
+  }catch(err){
+    settingsMsg.textContent='could not export settings';
+  }
+});
+const settingsImportBtn=document.getElementById('settingsImportBtn');
+const settingsImportFile=document.getElementById('settingsImportFile');
+settingsImportBtn.addEventListener('click',()=>settingsImportFile.click());
+settingsImportFile.addEventListener('change',e=>{
+  const f=e.target.files[0];
+  if(!f) return;
+  settingsMsg.textContent='loading…';
+  const fr=new FileReader();
+  fr.onload=async()=>{
+    try{
+      const obj=JSON.parse(fr.result);
+      await applySettings(obj);
+      settingsMsg.textContent='loaded '+f.name;
+    }catch(err){
+      settingsMsg.textContent='could not load that file — not a valid inkyMaker settings JSON';
+    }finally{
+      settingsImportFile.value='';
+    }
+  };
+  fr.onerror=()=>{settingsMsg.textContent='could not read that file';settingsImportFile.value='';};
+  fr.readAsText(f);
+});
+
+/* --- shared webgl context: the gpu renderer draws into it, then it is copied onto the visible 2d canvas --- */
+const GLSL_PREC='#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\n';
+const gfx={gl:null,buf:null};
+const initGL=()=>{
+  try{
+    const c=document.createElement('canvas');c.width=c.height=CANVAS_SIZE;
+    const gl=c.getContext('webgl',{alpha:true,premultipliedAlpha:true,antialias:false,depth:false,stencil:false});
+    if(!gl) throw new Error('no webgl');
+    gfx.gl=gl;
+    gfx.buf=gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER,gfx.buf);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+    c.addEventListener('webglcontextlost',e=>{e.preventDefault();gpu.ok=false;gpuMsg.textContent='renderer: cpu (gpu context lost)'});
+  }catch(err){
+    gfx.gl=null;
+  }
+};
+const present2D=()=>{
+  ctx.save();
+  ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+  ctx.clearRect(0,0,CANVAS_SIZE,CANVAS_SIZE);
+  ctx.drawImage(gfx.gl.canvas,0,0);
+  ctx.restore();
+};
+initGL();
+
+/* ==================== GPU RENDERER ====================
+   The whole drawing effect on the GPU, in one WebGL context:
+     voxels    - one point sprite per voxel (drawn opaque into their own layer, which is then composited with the
+                 opacity slider as ONE transparent layer), shaded per light in the vertex shader (phong / metal / glass /
+                 glow, hemisphere, fog, brightness + contrast). The list is depth-sorted once, so the GPU
+                 draws it back-to-front exactly like the old painter's loop.
+     shadow    - shell voxels stamped into a 256px layer, blurred through the same multi-scale pyramid,
+                 then laid over the ground (with the glow erase)
+     bleed     - same, with each voxel's hue
+     caustics  - per voxel, per light sample, as point sprites
+     glow pool - one full-screen pass
+   Then the lens composite, the optional spread, and a copy to the visible canvas. If WebGL is missing, or anything fails to
+   compile, it falls back to the original CPU renderer. */
+const gpu={ok:false,forDots:null,main:null,shell:null,mainN:0,shellN:0,pyr:null,scene:null,P:{}};
+const gpuMsg=document.getElementById('gpuMsg');
+const GPU_FRAG=GLSL_PREC+`
+varying vec4 vC;varying float vSz,vRad;
+void main(){
+  float d=length(gl_PointCoord-.5)*vSz;
+  float a=vC.a*clamp(vRad+.5-d,0.,1.);
+  gl_FragColor=vec4(vC.rgb*a,a);
+}`;
+const GPU_COMMON=`
+const float CEN=128.,GRID=256.,GROUND=100.,SP=0.9,FAR=1000.;
+uniform mat3 uRot;
+vec3 proj(vec3 p){vec3 q=uRot*(p-vec3(CEN));return vec3(q.x,q.y-q.z*.1,q.z);}
+vec4 ndc(vec2 s){return vec4(s.x/350.-1.,1.-s.y/350.,0.,1.);}
+`;
+const GPU_CAST=`
+uniform float uMode;uniform vec3 uS;
+bool castS(vec3 p,out vec3 sh){
+  sh=vec3(0.);
+  if(uMode<.5){
+    float dy=p.y-uS.y;if(abs(dy)<.001) return false;
+    float t=(GROUND-uS.y)/dy;if(t<=0.||t>50.) return false;
+    sh=vec3(uS.x+(p.x-uS.x)*t,GROUND,uS.z+(p.z-uS.z)*t);
+  }else{
+    if(uS.y<.02) return false;
+    float s=(p.y-GROUND)/uS.y;if(s<0.) return false;
+    sh=vec3(p.x-uS.x*s,GROUND,p.z-uS.z*s);
+  }
+  if(abs(sh.x-CEN)>GRID*3.||abs(sh.z-CEN)>GRID*3.) return false;
+  return true;
+}`;
+
+/* ---- voxel shading (vertex shader) ---- */
+const GPU_VOXEL_VS=GPU_COMMON+`
+attribute vec3 aPos;attribute vec3 aNrm;attribute vec3 aCol;
+uniform float uNL,uRes,uVoxOp,uAny,uNormPass;
+uniform float uSplit,uFeather,uBackOp,uFrontOp;
+uniform vec4 uLA[8];      /* type (0 area,1 point,2 sun,3 hemi), intensity, range, sizeX */
+uniform vec3 uLC[8];      /* colour (hemi: sky) */
+uniform vec3 uLG[8];      /* hemi: ground */
+uniform vec3 uLP[8];      /* area centre / point position / sun direction */
+uniform float uLZ[8];     /* area sizeZ */
+uniform float uPO,uMO,uGO,uGlO;
+uniform float uPhongPow,uPhongInten,uRough,uGlassStr,uGlowK,uGlowMatch;
+uniform float uPrOn,uPrRough,uPrSpec,uPrCoat,uPrCoatGloss,uPrSheen,uPrSub,uPrWrap;
+uniform float uFloorP,uFloorM,uFog,uBri,uCon;
+uniform vec3 uGlowCol;
+uniform float uRO,uRSky,uRHor,uRSh;
+uniform sampler2D uGround;   /* the ground as drawn so far (shadow, bleed, glow, caustics), premultiplied */
+varying vec4 vC;varying float vSz,vRad;
+
+/* chrome environment: dark sky over a hard horizon, white ground below. The ground is looked up in the
+   real ground pixels at the spot the reflected ray hits, so shadow marks show up in the mirror. */
+vec3 envRefl(vec3 d,vec3 r){
+  vec3 H=vec3(.92,.94,.97);
+  float hz=uRHor*.5+.002;
+  float m=smoothstep(-hz,hz,r.y);
+  vec3 Z=mix(H,vec3(.03,.035,.05),uRSky);
+  vec3 sky=mix(H,Z,pow(clamp(r.y,0.,1.),.45));
+  float t=r.y<-.001?max(0.,(GROUND-d.y)/r.y):0.;
+  vec3 h=vec3(d.x+r.x*t,GROUND,d.z+r.z*t);
+  vec3 g=vec3(1.);
+#ifndef NO_GTEX
+  vec3 p=proj(h);
+  vec2 s=vec2(350.+p.x*SP,350.+(p.y+18.)*SP);
+  vec4 tx=texture2D(uGround,vec2(s.x/700.,1.-s.y/700.));
+  g=mix(vec3(1.),tx.rgb+(1.-tx.a),uRSh);
+#endif
+  g=mix(g,H,smoothstep(60.,220.,length(vec2(h.x-CEN,h.z-CEN))));
+  return mix(g,sky,m);
+}
+
+float pf(float dist,float range){float q=clamp(dist/max(1.,range),0.,1.);float f=1.-smoothstep(0.,1.,q);return f*f;}
+
+vec3 mats(vec3 d,vec3 n,vec3 c,vec3 v,vec3 lp,vec3 lc,float li){
+  vec3 res=vec3(0.);
+  vec3 l=normalize(lp-d);
+  vec3 h=normalize(l+v);
+  float nl=max(0.,dot(n,l));
+  float nv=max(.001,dot(n,v));
+  float nh=max(0.,dot(n,h));
+  float lh=max(0.,dot(l,h));
+
+  /* Disney-inspired principled BRDF:
+     - wrapped diffuse gives the soft illustrated roll-off
+     - Schlick Fresnel keeps highlights physically plausible
+     - GGX-like microfacet specular gives broad, clean plastic highlights
+     - clearcoat creates the characteristic polished top layer
+     - sheen and a small subsurface-style wrap lift prevent dead black terminators */
+  if(uPrOn>.5){
+    float rough=clamp(uPrRough,.04,1.);
+    float alpha=max(.02,rough*rough);
+    float a2=alpha*alpha;
+    float den=(nh*nh)*(a2-1.)+1.;
+    float D=a2/max(.0001,3.14159265*den*den);
+    float k=alpha*.5;
+    float Gv=nv/(nv*(1.-k)+k);
+    float Gl=nl/(nl*(1.-k)+k);
+    float G=Gv*Gl;
+    float f0=mix(.04,.08,clamp(uPrSpec,0.,1.));
+    float F=f0+(1.-f0)*pow(1.-lh,5.);
+    float spec=D*G*F/max(.001,4.*nv*max(nl,.001));
+
+    float wrap=clamp(uPrWrap,0.,.5);
+    float wrapN=clamp((nl+wrap)/(1.+wrap),0.,1.);
+    float fd90=.5+2.*lh*lh*rough;
+    float Fd=1.+(fd90-1.)*pow(1.-nl,5.);
+    float diffuse=wrapN*Fd;
+
+    float sheen=uPrSheen*pow(1.-lh,5.)*(.5+.5*nh);
+    float sss=uPrSub*(1.-nl)*(1.-nl)*(.55+.45*nv);
+
+    vec3 diffCol=c*(diffuse*(1.-F)*(.98+.02*(1.-uPrCoat))+sss);
+    vec3 specCol=vec3(spec);
+    vec3 sheenCol=vec3(.8,.65,.55)*sheen;
+
+    /* clearcoat uses a much sharper GGX lobe */
+    float coatR=mix(.08,.35,1.-clamp(uPrCoatGloss,0.,1.));
+    float ca=coatR*coatR,ca2=ca*ca;
+    float cd=(nh*nh)*(ca2-1.)+1.;
+    float cD=ca2/max(.0001,3.14159265*cd*cd);
+    float ck=ca*.5;
+    float cG=(nv/(nv*(1.-ck)+ck))*(nl/(nl*(1.-ck)+ck));
+    float cF=.04+.96*pow(1.-lh,5.);
+    float coatSpec=cD*cG*cF/max(.001,4.*nv*max(nl,.001))*uPrCoat;
+
+    res += (diffCol + specCol + sheenCol + vec3(coatSpec))*lc*li;
+  }else if(uPO>.001){
+    float diff=max(uFloorP,nl),spec=pow(nh,uPhongPow);
+    res+=uPO*clamp((c*diff+spec*uPhongInten)*lc*li,0.,1.);
+  }
+
+  /* Existing explicit material layers remain available on top. */
+  if(uMO>.001){
+    float diff=max(uFloorM,nl)*(1.-uRough),spec=pow(nh,max(10.,90./(uRough+.15)));
+    res+=uMO*clamp((c*diff+vec3(220.,215.,210.)/255.*spec)*lc*li,0.,1.);
+  }
+  if(uGO>.001){
+    float fres=pow(max(0.,1.-abs(dot(n,v))),3.5);
+    float br=max(lc.r,max(lc.g,lc.b));
+    res+=uGO*clamp(fres*vec3(130.,150.,170.)/255.*uGlassStr*br*lc*li,0.,1.);
+  }
+  return res;
+}
+vec3 hemiMats(vec3 d,vec3 n,vec3 c,vec3 v,vec3 sky,vec3 gnd,float I){
+  vec3 res=vec3(0.);
+  if(uPO>.001){res+=uPO*c*mix(gnd,sky,.5+.5*n.y)*I;}
+  if(uMO>.001||uGO>.001){
+    float nv=dot(n,v);float ry=clamp(2.*nv*n.y-v.y,-1.,1.);
+    if(uMO>.001){
+      float t=clamp(uRough/.6,0.,1.);
+      float k=(.5+.5*ry)*(1.-t)+(.5+.5*n.y)*t;
+      res+=uMO*c*mix(gnd,sky,k)*I*(1.-uRough*.5);
+    }
+    if(uGO>.001){
+      float fres=pow(max(0.,1.-abs(nv)),3.5);
+      res+=uGO*vec3(130.,150.,170.)/255.*mix(gnd,sky,.5+.5*ry)*fres*uGlassStr*I;
+    }
+  }
+  return res;
+}
+void main(){
+  if(uNormPass>.5){
+    /* lens pass: write the view-space surface normal instead of a colour */
+    vec3 q0=uRot*(aPos-vec3(CEN));
+    vec3 vn=normalize(uRot*aNrm);
+    gl_Position=ndc(vec2(350.+q0.x*SP,350.+(q0.y-q0.z*.1)*SP));
+    gl_PointSize=1.6;vSz=1.6;vRad=0.65;
+    vC=vec4(vn*.5+.5,1.);
+    return;
+  }
+  vec3 d=aPos,n=aNrm,c=aCol;
+  vec3 v=normalize(vec3(CEN-d.x,CEN-d.y,80.-d.z));
+  vec3 acc=vec3(0.);
+  for(int i=0;i<8;i++){
+    if(float(i)>=uNL) break;
+    float ty=uLA[i].x,li=uLA[i].y;
+    if(ty>2.5){
+      acc+=hemiMats(d,n,c,v,uLC[i],uLG[i],li);
+    }else if(ty>1.5){
+      acc+=mats(d,n,c,v,d+uLP[i]*FAR,uLC[i],li);
+    }else if(ty>.5){
+      vec3 lp=uLP[i];
+      float dist=length(lp-d);
+      float atten=pf(dist,uLA[i].z);
+      acc+=mats(d,n,c,v,lp,uLC[i],li*atten*1.18);
+    }else{
+      float sx=uLA[i].w,sz=uLZ[i],stx=sx/uRes,stz=sz/uRes;
+      vec3 cp=uLP[i],a2=vec3(0.);
+      for(int a=0;a<4;a++){
+        if(float(a)>=uRes) break;
+        for(int b=0;b<4;b++){
+          if(float(b)>=uRes) break;
+          vec3 sp=vec3(cp.x-sx*.5+stx*.5+float(a)*stx,cp.y,cp.z-sz*.5+stz*.5+float(b)*stz);
+          float dist=length(sp-d);
+          float atten=pf(dist,uLA[i].z);
+          a2+=mats(d,n,c,v,sp,uLC[i],li*atten*1.18);
+        }
+      }
+      acc+=a2/(uRes*uRes);
+    }
+  }
+  vec3 col=acc;
+  if(uRO>.001){
+    /* true view direction in world space (screen z with the -0.4 tilt, rotated back), so the horizon stays level on screen */
+    vec3 vw=normalize(vec3(0.,.4,1.))*uRot;
+    vec3 rr=normalize(2.*dot(n,vw)*n-vw);
+    col+=uRO*envRefl(d,rr)*mix(vec3(1.),c,.6);
+  }
+  if(uGO>.001) col+=uGO*c*vec3(.55,.55,.65)*uAny;
+  if(uGlO>.001){
+    vec3 base=uGlowMatch>.5?c:uGlowCol;
+    vec3 e=clamp(base*uGlowK+max(0.,uGlowK-1.)*70./255.,0.,1.);
+    col+=e*uGlO;
+  }
+  vec3 q=uRot*(d-vec3(CEN));
+  float ff=((q.z+32.)/64.)*uFog;
+  col=col*(1.-ff)+vec3(30.,30.,35.)/255.*ff;
+  col=clamp(((col-128./255.)*uCon+128./255.)*uBri,0.,1.);
+  gl_Position=ndc(vec2(350.+q.x*SP,350.+(q.y-q.z*.1)*SP));
+  gl_PointSize=1.6;vSz=1.6;vRad=0.65;
+  /* feather the back/front opacity across a depth band around the split, instead of a
+     hard cut, so it doesn't show as a seam/ring across the object */
+  float st=clamp((q.z-(uSplit-uFeather))/(uFeather*2.),0.,1.);
+  st=st*st*(3.-2.*st);
+  float op=mix(uBackOp,uFrontOp,st);
+  vC=vec4(col,op*uVoxOp);
+}`;
+
+/* ---- shadow + colour-bleed stamps (vertex shader) ---- */
+const GPU_STAMP_VS=GPU_COMMON+GPU_CAST+`
+attribute vec3 aPos;attribute vec4 aBl;
+uniform float uKind,uLh,uShA,uGB,uSr0,uBr;
+uniform vec3 uFill;
+varying vec4 vC;varying float vSz,vRad;
+void main(){
+  gl_Position=vec4(2.,2.,2.,1.);
+  vec3 d=aPos,sh;
+  if(!castS(d,sh)) return;
+  float dist=length(vec2(sh.x-CEN,sh.z-CEN));
+  float a,rad;vec3 col;
+  if(uKind<.5){
+    float fade=clamp(1.-length(vec2(d.x-CEN,d.z-CEN))/GRID,.2,1.);
+    float reach=clamp((70.-dist)/(70.-22.),0.,1.);
+    a=uShA*fade*uLh*reach;if(a<=.008) return;
+    col=uFill;rad=uSr0;
+  }else{
+    if(aBl.w<.02) return;
+    float fade=pow(clamp(1.-dist/40.,0.,1.),1.5);if(fade<.01) return;
+    a=clamp(aBl.w*fade*uLh*uGB,0.,1.);
+    col=aBl.rgb;rad=uBr;
+  }
+  vec3 p=proj(sh);
+  gl_Position=ndc(vec2(350.+p.x*SP,350.+(p.y+18.)*SP));
+  gl_PointSize=2.*rad+2.;vSz=gl_PointSize;vRad=rad;
+  vC=vec4(col,a);
+}`;
+
+/* ---- caustics (vertex shader) ---- */
+const GPU_CAUSTIC_VS=GPU_COMMON+GPU_CAST+`
+attribute vec3 aPos;attribute vec3 aNrm;
+uniform float uLh,uGB,uCO,uT1,uT2,uSR,uPass,uSharp;
+uniform vec3 uCol;
+varying vec4 vC;varying float vSz,vRad;
+float refr(vec3 d,vec3 n,vec3 lp){
+  vec3 L=normalize(lp-d);float cosT=dot(n,L);
+  if(cosT<=0.) return 0.;
+  float eta=1./1.45,k=1.-eta*eta*(1.-cosT*cosT);
+  if(k<0.) return 0.;
+  vec3 r=normalize(eta*L-(eta*cosT+sqrt(k))*n);
+  float align=max(0.,dot(r,normalize(vec3(CEN)-d)));
+  float e=(length(vec2(d.x-CEN,d.z-CEN))-uSR*.78)/3.5;
+  return clamp(align*exp(-e*e)*(1.+sin(uT1+d.y*.3)*.15),0.,1.);
+}
+float ring(float sx,float sz,float lx,float lz){
+  float lx2=lx-CEN,lz2=lz-CEN,ll=length(vec2(lx2,lz2));if(ll==0.) ll=1.;
+  float plx=lx2/ll,plz=lz2/ll;
+  float rx=sx-CEN,rz=sz-CEN,pr=rx*plx+rz*plz;
+  if(pr>2.) return 0.;
+  float px=rx-pr*plx,pz=rz-pr*plz,pd=length(vec2(px,pz));
+  float fr=uSR*.55+sin(uT2)*1.5,rd=pd-fr,ri=exp(-(rd*rd)/12.);
+  float dd=pr+12.,di=exp(-(dd*dd)/40.),ob=pr<0.?exp(pr*.08):0.;
+  float ir=pd-4.,ir2=exp(-(ir*ir)/4.)*di*ob*.6;
+  return clamp(ri*di*ob*1.5+ir2,0.,1.);
+}
+void main(){
+  gl_Position=vec4(2.,2.,2.,1.);
+  vec3 d=aPos,sh;
+  if(!castS(d,sh)) return;
+  vec3 L;float rx,rz;
+  if(uMode>.5){L=d+uS*FAR;rx=CEN+uS.x*FAR;rz=CEN+uS.z*FAR;}
+  else{L=uS;rx=uS.x;rz=uS.z;}
+  float c=max(refr(d,aNrm,L),ring(sh.x,sh.z,rx,rz));
+  if(c<=.05) return;
+  float fade=clamp(1.-length(vec2(d.x-CEN,d.z-CEN))/GRID,.2,1.);
+  float ca=c*uCO*fade*uLh*1.2*uGB;
+  float rad,al;
+  float tight=mix(1.55,.68,clamp(uSharp,0.,1.));
+  if(uPass<.5){rad=2.5*1.2*(.5+c*.8)*tight;al=ca*.9;}
+  else{if(c<=.3) return;rad=2.5*2.*c*tight;al=ca*.3;}
+  vec3 p=proj(sh);
+  gl_Position=ndc(vec2(350.+p.x*SP,350.+(p.y+18.)*SP));
+  gl_PointSize=2.*rad+2.;vSz=gl_PointSize;vRad=rad;
+  vC=vec4(uCol,al);
+}`;
+
+/* ---- full-screen passes ---- */
+const GPU_GROUND_FS=GLSL_PREC+`uniform vec2 uObj,uRad,uPlane;uniform vec3 uObjCol;
+uniform float uShadow,uBleed,uCaustic,uShadowSharp,uBleedSharp,uCausticSharp,uCount;
+uniform vec4 uLPos[4]; uniform vec4 uLCol[4];
+float ell(vec2 p,vec2 c,vec2 r,float soft){vec2 q=(p-c)/max(r,vec2(.001));float d=length(q);float w=max(.0001,soft);return exp(-pow(d,2.0)/(w*w));}
+void main(){vec2 p=vec2(gl_FragCoord.x,700.-gl_FragCoord.y);vec3 ground=vec3(0.);float shadow=0.,ca=0.;for(int i=0;i<4;i++){if(float(i)>=uCount)break;vec2 c=uLPos[i].xy;float strength=max(0.,uLPos[i].w);vec2 axis=normalize(c-uObj+vec2(.0001));vec2 perp=vec2(-axis.y,axis.x);float dist=length(c-uObj);vec2 sr=vec2(max(uRad.x*.72,12.)+dist*.34,max(uRad.y*.46,10.)+dist*.16);vec2 bp=sr*mix(2.35,1.08,clamp(uBleedSharp,0.,1.));vec2 cp=sr*mix(1.7,.82,clamp(uCausticSharp,0.,1.));float sh=ell(p,c,sr,mix(.95,.20,clamp(uShadowSharp,0.,1.)));float bl=ell(p,c,bp,mix(1.45,.34,clamp(uBleedSharp,0.,1.)));float cu=ell(p,c+perp*sr.y*.18,cp,mix(1.25,.38,clamp(uCausticSharp,0.,1.)));shadow=max(shadow,sh*strength);ca=max(ca,cu*strength);vec3 bleedCol=mix(uLCol[i].rgb,uObjCol,.72);ground+=bleedCol*(bl*uBleed*.72+cu*uCaustic*.12);}float a=max(shadow*uShadow,max(length(ground),ca*uCaustic));vec3 rgb=ground*(1.-shadow*uShadow*.72)+vec3(ca*uCaustic*.08);gl_FragColor=vec4(clamp(rgb,0.,1.),clamp(a,0.,.92));}`;
+
+const GPU_QUAD_VS='attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
+const GPU_DOWN_FS=GLSL_PREC+`uniform sampler2D uA;uniform float uN;
+void main(){gl_FragColor=texture2D(uA,gl_FragCoord.xy/uN);}`;
+const GPU_UP_FS=GLSL_PREC+`uniform sampler2D uA;uniform sampler2D uB;uniform float uN,uW,uHas;
+void main(){
+  vec2 uv=gl_FragCoord.xy/uN;
+  vec4 a=texture2D(uA,uv)*uW;
+  vec4 b=uHas>.5?texture2D(uB,uv):vec4(0.);
+  gl_FragColor=a+b*(1.-a.a);
+}`;
+/* lay a blurred layer over the scene; optionally knock it out where the glow pool reaches (destination-out) */
+const GPU_COMP_FS=GLSL_PREC+`uniform sampler2D uA;uniform float uAlpha,uErase;uniform vec3 uPool;
+void main(){
+  vec4 c=texture2D(uA,gl_FragCoord.xy/700.)*uAlpha;
+  if(uErase>0.){
+    float t=length(vec2(gl_FragCoord.x,700.-gl_FragCoord.y)-uPool.xy)/uPool.z;
+    float e=t<1.?clamp(uErase*exp(-3.*t*t)*(1.-t),0.,1.):0.;
+    c*=(1.-e);
+  }
+  gl_FragColor=c;
+}`;
+const GPU_POOL_FS=GLSL_PREC+`uniform vec3 uPC,uCol,uCore;uniform vec2 uPk;
+float pa(float t,float pk){return t<1.?clamp(pk*exp(-3.*t*t)*(1.-t),0.,1.):0.;}
+void main(){
+  float dist=length(vec2(gl_FragCoord.x,700.-gl_FragCoord.y)-uPC.xy);
+  float a1=pa(dist/uPC.z,uPk.x),a2=pa(dist/(uPC.z*.45),uPk.y);
+  vec4 s1=vec4(uCol*a1,a1),s2=vec4(uCore*a2,a2);
+  gl_FragColor=s2+s1*(1.-a2);
+}`;
+/* lens: the front layer's surface normals bend the view of everything behind it (back layer + ground).
+   + bend pulls the picture from toward the object centre (convex, magnifying); - pushes it the other way.
+   dispersion offsets the red and blue lookups a little in opposite directions. Then front over that,
+   and the whole result is faded against the untouched ground by the master opacity. */
+const GPU_LENS_FS=GLSL_PREC+`uniform sampler2D uS;uniform sampler2D uB;uniform sampler2D uF;uniform sampler2D uN;
+uniform float uBackA,uFrontA,uMaster,uBend,uDisp;
+vec4 under(vec2 u){
+  vec4 g=texture2D(uS,u);
+  vec4 b=texture2D(uB,u)*uBackA;
+  return b+g*(1.-b.a);
+}
+void main(){
+  vec2 uv=gl_FragCoord.xy/700.;
+  vec4 sc=texture2D(uS,uv);
+  vec4 nt=texture2D(uN,uv);
+  vec4 base;
+  if(uBend!=0.&&nt.a>.004){
+    vec3 n=nt.rgb/nt.a*2.-1.;
+    vec2 off=vec2(-n.x,n.y)*uBend*.10*nt.a;
+    if(uDisp>.001){
+      vec4 a=under(uv+off*(1.+uDisp*.4)),g=under(uv+off),c=under(uv+off*(1.-uDisp*.4));
+      base=vec4(a.r,g.g,c.b,g.a);
+    }else base=under(uv+off);
+  }else base=under(uv);
+  vec4 f=texture2D(uF,uv)*uFrontA;
+  vec4 comp=f+base*(1.-f.a);
+  gl_FragColor=mix(sc,comp,uMaster);
+}`;
+/* gimp-style spread: each pixel takes the colour of a random neighbour within +-amount/2 pixels */
+const GPU_SPREAD_FS=GLSL_PREC+`uniform sampler2D uA;uniform vec2 uAmt;uniform float uSeed;
+float h21(vec2 p,float s){
+  vec3 q=fract(vec3(p.xyx)*.1031+s*.1373);
+  q+=dot(q,q.yzx+33.33);
+  return fract((q.x+q.y)*q.z);
+}
+void main(){
+  vec2 px=floor(gl_FragCoord.xy);
+  vec2 r=vec2(h21(px,uSeed),h21(px+vec2(41.7,13.3),uSeed))-.5;
+  vec2 p=clamp(floor(gl_FragCoord.xy+r*uAmt)+.5,vec2(.5),vec2(699.5));
+  gl_FragColor=texture2D(uA,p/700.);
+}`;
+const GPU_BLIT_FS=GLSL_PREC+`uniform sampler2D uA;
+void main(){gl_FragColor=texture2D(uA,gl_FragCoord.xy/700.);}`;
+const GPU_AA3_FS=GLSL_PREC+`uniform sampler2D uA;
+vec4 S(vec2 u){return texture2D(uA,clamp(u,vec2(0.),vec2(1.)));}
+void main(){
+ vec2 u=gl_FragCoord.xy/700.;
+ vec2 p=vec2(1./700.);
+ /* strong 3px-radius 7x7 Gaussian-like reconstruction.
+    Accumulate premultiplied RGB so transparent edges do not create dark/bright halos. */
+ float w[7];
+ w[0]=1.; w[1]=2.; w[2]=3.; w[3]=4.; w[4]=3.; w[5]=2.; w[6]=1.;
+ vec3 rgb=vec3(0.); float a=0.; float total=0.;
+ for(int y=-3;y<=3;y++){
+   for(int x=-3;x<=3;x++){
+     float ww=w[x+3]*w[y+3];
+     vec4 c=S(u+vec2(float(x),float(y))*p);
+     rgb+=c.rgb*c.a*ww;
+     a+=c.a*ww;
+     total+=ww;
+   }
+ }
+ a/=total;
+ if(a>0.0001) rgb/=max(a*total,0.0001);
+ gl_FragColor=vec4(rgb,a);
+}`;
+
+/* Restore the ground effects after AA/spread. The object stays filtered; the
+   shadow/bleed/caustic ground layer does not, except where the object covers it. */
+const GPU_RESTORE_FX_FS=GLSL_PREC+`uniform sampler2D uFiltered,uFx,uB,uF;
+uniform float uBackA,uFrontA,uMaster;
+void main(){
+  vec2 uv=gl_FragCoord.xy/700.;
+  vec4 filtered=texture2D(uFiltered,uv);
+  vec4 fx=texture2D(uFx,uv);
+  vec4 b=texture2D(uB,uv)*uBackA;
+  vec4 f=texture2D(uF,uv)*uFrontA;
+  float objectA=clamp(max(b.a,f.a)*uMaster,0.,1.);
+  gl_FragColor=mix(fx,filtered,objectA);
+}`;
+
+const initGPU=()=>{
+  try{
+    const gl=gfx.gl;
+    if(!gl) throw new Error('no webgl');
+    if(location.hash==='#cpu') throw new Error('cpu forced');
+    const psr=gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE);
+    if(!psr||psr[1]<16) throw new Error('point sprites too small');
+    const mk=(type,src)=>{
+      const sh=gl.createShader(type);gl.shaderSource(sh,src);gl.compileShader(sh);
+      if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)+'\n'+src.slice(0,80));
+      return sh;
+    };
+    const prog=(vs,fs,attrs)=>{
+      const p=gl.createProgram();
+      gl.attachShader(p,mk(gl.VERTEX_SHADER,vs));gl.attachShader(p,mk(gl.FRAGMENT_SHADER,fs));
+      attrs.forEach((a,i)=>gl.bindAttribLocation(p,i,a));
+      gl.linkProgram(p);
+      if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+      const locs={};
+      return{p,attrs:attrs.length,u:n=>(n in locs)?locs[n]:(locs[n]=gl.getUniformLocation(p,n))};
+    };
+    const P=gpu.P;
+    gpu.vtf=gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS)>0;
+    P.voxel=prog((gpu.vtf?'':'#define NO_GTEX\n')+GPU_VOXEL_VS,GPU_FRAG,['aPos','aNrm','aCol']);
+    P.stamp=prog(GPU_STAMP_VS,GPU_FRAG,['aPos','aBl']);
+    P.caustic=prog(GPU_CAUSTIC_VS,GPU_FRAG,['aPos','aNrm']);
+    P.ground=prog(GPU_QUAD_VS,GPU_GROUND_FS,['p']);
+    P.down=prog(GPU_QUAD_VS,GPU_DOWN_FS,['p']);
+    P.up=prog(GPU_QUAD_VS,GPU_UP_FS,['p']);
+    P.comp=prog(GPU_QUAD_VS,GPU_COMP_FS,['p']);
+    P.pool=prog(GPU_QUAD_VS,GPU_POOL_FS,['p']);
+    P.blit=prog(GPU_QUAD_VS,GPU_BLIT_FS,['p']);
+    P.aa3=prog(GPU_QUAD_VS,GPU_AA3_FS,['p']);
+    P.restoreFx=prog(GPU_QUAD_VS,GPU_RESTORE_FX_FS,['p']);
+    P.lens=prog(GPU_QUAD_VS,GPU_LENS_FS,['p']);
+    P.spread=prog(GPU_QUAD_VS,GPU_SPREAD_FS,['p']);
+    /* render targets */
+    const target=(w,h)=>{
+      const t=gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D,t);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      const f=gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER,f);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,t,0);
+      if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE) throw new Error('framebuffer');
+      return{t,f,n:w};
+    };
+    gpu.scene=target(CANVAS_SIZE,CANVAS_SIZE);
+    gpu.fx=target(CANVAS_SIZE,CANVAS_SIZE); /* unfiltered shadow/bleed/caustic layer */
+    gpu.ground=target(CANVAS_SIZE,CANVAS_SIZE);
+    gpu.vox=target(CANVAS_SIZE,CANVAS_SIZE);      /* back layer */
+    gpu.voxF=target(CANVAS_SIZE,CANVAS_SIZE);     /* front layer */
+    gpu.nrm=target(CANVAS_SIZE,CANVAS_SIZE);      /* front surface normals (lens) */
+    gpu.out=target(CANVAS_SIZE,CANVAS_SIZE);
+    gpu.tmp=target(CANVAS_SIZE,CANVAS_SIZE);
+    const PYR=6;
+    gpu.pyr={down:[],up:[]};
+    for(let i=0;i<PYR;i++){gpu.pyr.down.push(target(256>>i,256>>i));gpu.pyr.up.push(target(256>>i,256>>i));}
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    gpu.main=gl.createBuffer();gpu.shell=gl.createBuffer();
+    gpu.ok=true;
+  }catch(err){
+    gpu.ok=false;
+    console.warn('gpu renderer unavailable, using cpu renderer:',err&&err.message);
+  }
+  gpuMsg.textContent=gpu.ok?'renderer: gpu':(location.hash==='#cpu'?'renderer: cpu (forced)':'renderer: cpu (webgl not available)');
+};
+
+/* rotation part of project(), as a column-major mat3 (project() then adds the -0.4*z tilt) */
+const gpuRotMat=()=>{
+  const rot=(x,y,z)=>{
+    const rx=state.rotX*Math.PI/180,y1=y*Math.cos(rx)-z*Math.sin(rx),z1=y*Math.sin(rx)+z*Math.cos(rx);
+    y=y1;z=z1;
+    const ry=state.rotY*Math.PI/180,x2=x*Math.cos(ry)+z*Math.sin(ry),z2=-x*Math.sin(ry)+z*Math.cos(ry);
+    x=x2;z=z2;
+    const rz=state.rotZ*Math.PI/180,x3=x*Math.cos(rz)-y*Math.sin(rz),y3=x*Math.sin(rz)+y*Math.cos(rz);
+    return[x3,y3,z];
+  };
+  return new Float32Array([...rot(1,0,0),...rot(0,1,0),...rot(0,0,1)]);
+};
+
+/* upload the voxels: depth-sorted once (back to front), plus a shell-only list for shadow / bleed stamps */
+const gpuUpload=()=>{
+  const gl=gfx.gl,dots=state.dots;
+  const ord=dots.map(d=>({d,z:project(d.x,d.y,d.z,state.rotX,state.rotY,state.rotZ).z})).sort((a,b)=>a.z-b.z);
+  const M=new Float32Array(ord.length*9);
+  let shellN=0;
+  for(const o of ord) if(o.d.surf) shellN++;
+  const S=new Float32Array(shellN*7);
+  let si=0;
+  ord.forEach((o,i)=>{
+    const d=o.d,c=d.c,k=i*9;
+    M[k]=d.x;M[k+1]=d.y;M[k+2]=d.z;M[k+3]=d.nx;M[k+4]=d.ny;M[k+5]=d.nz;
+    M[k+6]=c.r/255;M[k+7]=c.g/255;M[k+8]=c.b/255;
+    if(d.surf){
+      S[si]=d.x;S[si+1]=d.y;S[si+2]=d.z;
+      S[si+3]=d.bsr/255;S[si+4]=d.bsg/255;S[si+5]=d.bsb/255;S[si+6]=d.bw;
+      si+=7;
+    }
+  });
+  gl.bindBuffer(gl.ARRAY_BUFFER,gpu.main);gl.bufferData(gl.ARRAY_BUFFER,M,gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER,gpu.shell);gl.bufferData(gl.ARRAY_BUFFER,S,gl.STATIC_DRAW);
+  gpu.zs=new Float32Array(ord.map(o=>o.z));
+  gpu.mainN=ord.length;gpu.shellN=shellN;gpu.forDots=dots;
+};
+
+const gpuRender=()=>{
+  const gl=gfx.gl,P=gpu.P;
+  time+=16;
+  prepareLights();
+  if(gpu.forDots!==state.dots) gpuUpload();
+  const rotM=gpuRotMat();
+  const BS=CANVAS_SIZE;
+  const bA=clamp(state.backOpacity,0,1),fA=clamp(state.frontOpacity,0,1),mA=clamp(state.voxelOpacity,0,1);
+  const setAttrs=(buf,stride,specs)=>{
+    gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+    for(let i=0;i<4;i++) gl.disableVertexAttribArray(i);
+    for(const [loc,size,off] of specs){gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,size,gl.FLOAT,false,stride*4,off*4);}
+  };
+  const quad=()=>setAttrs(gfx.buf,0,[[0,2,0]]);
+  const target=(t,w)=>{gl.bindFramebuffer(gl.FRAMEBUFFER,t?t.f:null);gl.viewport(0,0,w,w);};
+  const tex=(unit,t)=>{gl.activeTexture(gl.TEXTURE0+unit);gl.bindTexture(gl.TEXTURE_2D,t);};
+  const blendOn=()=>{gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);};
+  gl.disable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.disable(gl.SCISSOR_TEST);
+  gl.colorMask(true,true,true,true);
+
+  const shadowLights=state.active.filter(A=>A.shadowSamples);
+  const go=state.glowOpacity,glowOn=go>.001;
+  const glowL=glowOn?clamp(go*state.glowStrength/2,0,1):0;
+  const causticOn=state.causticOpacity>.01,shadowOn=state.shadowOpacity>.001;
+
+  /* GPU glow pool: keep this local to gpuRender(). The CPU renderer has its own
+     pool calculation later in renderCPU(), so the GPU path must not reference
+     that CPU-only variable. */
+  let pool=null;
+  if(glowL>.001){
+    if(state.gcFor!==state.dots){
+      let sr=0,sg=0,sb=0,w=0;
+      for(const d of state.dots){
+        if(!d.surf||d.bw<.02) continue;
+        sr+=d.bsr*d.bw; sg+=d.bsg*d.bw; sb+=d.bsb*d.bw; w+=d.bw;
+      }
+      if(w>0){
+        const mx=Math.max(sr,sg,sb)||1;
+        state.gc={r:Math.round(sr*255/mx),g:Math.round(sg*255/mx),b:Math.round(sb*255/mx)};
+      }else state.gc={r:255,g:255,b:255};
+      state.gcFor=state.dots;
+    }
+    const poolCol=state.glowMatch?state.gc:hexToRgb(state.glowColor);
+    const coreCol={r:(poolCol.r*.7+255*.3)|0,g:(poolCol.g*.7+255*.3)|0,b:(poolCol.b*.7+255*.3)|0};
+    const pc=project(CEN,GROUND_Y,CEN,state.rotX,state.rotY,state.rotZ);
+    const px=cx+pc.x*SPACING, py=cy+(pc.y+18)*SPACING;
+    const pr=(state.shapeRadius*.8+state.haloSize*1.6+glowL*20)*SPACING;
+    pool={x:px,y:py,R:pr,poolCol,coreCol};
+  }
+  const caustCol=state.texture?{r:255,g:255,b:255}:brightenHex(state.color,.7);
+
+  /* scene target, transparent */
+  target(gpu.scene,BS);
+  gl.disable(gl.BLEND);
+  gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
+  blendOn();
+
+  const setSample=(prog,s)=>{
+    if(s.dir){gl.uniform1f(prog.u('uMode'),1);gl.uniform3f(prog.u('uS'),s.dir.x,s.dir.y,s.dir.z);}
+    else{gl.uniform1f(prog.u('uMode'),0);gl.uniform3f(prog.u('uS'),s.x,s.y,s.z);}
+    gl.uniform1f(prog.u('uLh'),s.lh);
+  };
+
+  /* Continuous ground plane: analytic shadow / colour bleed / caustic fields. No ground dots. */
+  {
+    target(gpu.scene,BS);gl.disable(gl.BLEND);quad();const G=P.ground;gl.useProgram(G.p);
+    gl.uniform2f(G.u('uObj'),cx,cy-(18*SPACING));gl.uniform2f(G.u('uRad'),Math.max(24,state.shapeRadius*SPACING),Math.max(20,state.shapeRadius*.58*SPACING));gl.uniform2f(G.u('uPlane'),0,GROUND_Y);const objc=hexToRgb(state.color);gl.uniform3f(G.u('uObjCol'),objc.r/255,objc.g/255,objc.b/255);
+    gl.uniform1f(G.u('uShadow'),shadowOn?clamp(state.shadowOpacity,0,1):0);gl.uniform1f(G.u('uBleed'),state.colorBleed>.001?clamp(state.colorBleed*BLEED_MAX,0,1):0);gl.uniform1f(G.u('uCaustic'),causticOn?state.causticOpacity:0);
+    gl.uniform1f(G.u('uShadowSharp'),clamp(state.shadowSharpness,0,1));gl.uniform1f(G.u('uBleedSharp'),clamp(state.bleedSharpness,0,1));gl.uniform1f(G.u('uCausticSharp'),clamp(state.causticSharpness,0,1));
+    const maxL=Math.min(4,shadowLights.length);gl.uniform1f(G.u('uCount'),maxL);
+    for(let i=0;i<4;i++){let x=cx,y=cy-(18*SPACING),spread=state.shapeRadius*SPACING,strength=0,r=0,g=0,b=0;if(i<maxL){const A=shadowLights[i],s=A.center;let sx=CEN,sz=CEN;if(s.dir){sx=CEN-s.dir.x*(state.shapeRadius+35);sz=CEN-s.dir.z*(state.shapeRadius+35);}else{sx=s.x;sz=s.z;}const q=project(sx,GROUND_Y,sz,state.rotX,state.rotY,state.rotZ);x=cx+q.x*SPACING;y=cy+(q.y+18)*SPACING;spread=Math.max(18,state.shapeRadius*SPACING*(1+Math.min(2,A.gain*.35)));strength=clamp(A.gain*A.bright,0,2);r=A.lcol.r/255;g=A.lcol.g/255;b=A.lcol.b/255;}gl.uniform4f(G.u('uLPos['+i+']'),x,y,spread,strength);gl.uniform4f(G.u('uLCol['+i+']'),r,g,b,1);}
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  }
+
+  /* Save only shadow/colour-bleed/caustic ground effects before glow and voxels.
+     Final AA/spread is applied to the object composite, then this layer is restored. */
+  target(gpu.fx,BS);
+  gl.disable(gl.BLEND);quad();
+  gl.useProgram(P.blit.p);gl.uniform1i(P.blit.u('uA'),0);tex(0,gpu.scene.t);
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+
+  /* 4. glow pool */
+  if(pool){
+    target(gpu.scene,BS);blendOn();quad();
+    const Q=P.pool;
+    gl.useProgram(Q.p);
+    gl.uniform3f(Q.u('uPC'),pool.x,pool.y,pool.R);
+    gl.uniform3f(Q.u('uCol'),pool.poolCol.r/255,pool.poolCol.g/255,pool.poolCol.b/255);
+    gl.uniform3f(Q.u('uCore'),pool.coreCol.r/255,pool.coreCol.g/255,pool.coreCol.b/255);
+    gl.uniform2f(Q.u('uPk'),clamp(glowL*1.4,0,.95),clamp(glowL*1.1,0,.8));
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  }
+
+  /* 5. voxels */
+  {
+    const V=P.voxel;
+    const reflOn=state.reflOpacity>.001;
+    if(reflOn){
+      /* snapshot of the ground so the mirror finish can read it while the voxels are drawn on top */
+      target(gpu.ground,BS);gl.disable(gl.BLEND);quad();
+      gl.useProgram(P.blit.p);gl.uniform1i(P.blit.u('uA'),0);tex(0,gpu.scene.t);
+      gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    }
+    gl.useProgram(V.p);
+    setAttrs(gpu.main,9,[[0,3,0],[1,3,3],[2,3,6]]);
+    gl.uniformMatrix3fv(V.u('uRot'),false,rotM);
+    const L=state.active,nl=Math.min(8,L.length);
+    const LA=new Float32Array(32),LC=new Float32Array(24),LG=new Float32Array(24),LP=new Float32Array(24),LZ=new Float32Array(8);
+    for(let i=0;i<nl;i++){
+      const A=L[i],ty=A.type==='area'?0:A.type==='point'?1:A.type==='sun'?2:3;
+      LA[i*4]=ty;LA[i*4+1]=A.intensity;LA[i*4+2]=A.range||1;LA[i*4+3]=A.sizeX||0;
+      LC[i*3]=A.lcol.r/255;LC[i*3+1]=A.lcol.g/255;LC[i*3+2]=A.lcol.b/255;
+      if(ty===3){LG[i*3]=A.ground.r/255;LG[i*3+1]=A.ground.g/255;LG[i*3+2]=A.ground.b/255;}
+      const p=ty===0?A.apos:ty===1?A.pos:ty===2?A.dir:null;
+      if(p){LP[i*3]=p.x;LP[i*3+1]=p.y;LP[i*3+2]=p.z;}
+      LZ[i]=A.sizeZ||0;
+    }
+    gl.uniform1f(V.u('uNL'),nl);gl.uniform1f(V.u('uRes'),state.sampleRes);
+    gl.uniform4fv(V.u('uLA'),LA);gl.uniform3fv(V.u('uLC'),LC);gl.uniform3fv(V.u('uLG'),LG);
+    gl.uniform3fv(V.u('uLP'),LP);gl.uniform1fv(V.u('uLZ'),LZ);
+    gl.uniform1f(V.u('uAny'),state.active.length?1:0);
+    gl.uniform1f(V.u('uVoxOp'),1);
+    gl.uniform1f(V.u('uPO'),state.phongOpacity);gl.uniform1f(V.u('uMO'),state.bulletOpacity);
+    gl.uniform1f(V.u('uGO'),state.glassOpacity);gl.uniform1f(V.u('uGlO'),go);
+    gl.uniform1f(V.u('uPhongPow'),state.phongPower);gl.uniform1f(V.u('uPhongInten'),state.phongInten);
+    gl.uniform1f(V.u('uPrOn'),state.principledOn?1:0);gl.uniform1f(V.u('uPrRough'),state.prRough);
+    gl.uniform1f(V.u('uPrSpec'),state.prSpec);gl.uniform1f(V.u('uPrCoat'),state.prCoat);gl.uniform1f(V.u('uPrCoatGloss'),state.prCoatGloss);
+    gl.uniform1f(V.u('uPrSheen'),state.prSheen);gl.uniform1f(V.u('uPrSub'),state.prSub);gl.uniform1f(V.u('uPrWrap'),state.prWrap);
+    gl.uniform1f(V.u('uRough'),state.roughness);gl.uniform1f(V.u('uGlassStr'),state.glassStrength);
+    gl.uniform1f(V.u('uGlowK'),state.glowStrength);gl.uniform1f(V.u('uGlowMatch'),state.glowMatch?1:0);
+    const gc=hexToRgb(state.glowColor);gl.uniform3f(V.u('uGlowCol'),gc.r/255,gc.g/255,gc.b/255);
+    gl.uniform1f(V.u('uFloorP'),state.floorP);gl.uniform1f(V.u('uFloorM'),state.floorM);
+    gl.uniform1f(V.u('uRO'),reflOn?state.reflOpacity:0);gl.uniform1f(V.u('uRSky'),state.reflSky);
+    gl.uniform1f(V.u('uRHor'),state.reflHorizon);gl.uniform1f(V.u('uRSh'),state.reflShadow);
+    gl.uniform1i(V.u('uGround'),2);tex(2,gpu.ground.t);gl.activeTexture(gl.TEXTURE0);
+    gl.uniform1f(V.u('uFog'),state.fogAmount);
+    gl.uniform1f(V.u('uBri'),state.postBrightness);gl.uniform1f(V.u('uCon'),state.postContrast);
+    gl.uniform1f(V.u('uNormPass'),0);
+
+    /* front / back layers. Unless the lens is bending light (which needs true separate
+       front/back textures to refract), skip the hard split and draw every point in one
+       pass, with each dot's own alpha feathered across a depth band around the split
+       (computed in the vertex shader) — a hard binary cut there showed up as a visible
+       seam/ring on the object even when it wasn't an outright doubled-texture edge. */
+    const bend=state.lensBend,lensOn=Math.abs(bend)>.001;
+    const unified=!lensOn;
+    const feather=Math.max(12,state.shapeRadius*.35);
+    gl.uniform1f(V.u('uSplit'),state.split);
+    gl.uniform1f(V.u('uFeather'),unified?feather:.001);
+    gl.uniform1f(V.u('uBackOp'),unified?bA:1);
+    gl.uniform1f(V.u('uFrontOp'),unified?fA:1);
+    let lo=0,hi=gpu.mainN;
+    if(!unified){
+      while(lo<hi){const m=(lo+hi)>>1;if(gpu.zs[m]<state.split) lo=m+1;else hi=m;}
+    }
+    const backN=unified?0:lo,frontN=unified?gpu.mainN:gpu.mainN-lo;
+    const fresh=t=>{target(t,BS);gl.disable(gl.BLEND);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);blendOn();};
+    fresh(gpu.vox);
+    if(!unified&&bA>.001&&backN>0) gl.drawArrays(gl.POINTS,0,backN);
+    fresh(gpu.voxF);
+    if((unified||fA>.001)&&frontN>0) gl.drawArrays(gl.POINTS,backN,frontN);
+    fresh(gpu.nrm);
+    if(lensOn&&frontN>0){
+      gl.uniform1f(V.u('uNormPass'),1);
+      gl.drawArrays(gl.POINTS,backN,frontN);
+      gl.uniform1f(V.u('uNormPass'),0);
+    }
+
+    /* compose: ground -> (bent) back layer -> front layer, faded by opacity
+       (opacity is already baked per-dot in the unified pass, so the image-level
+       weights just pass it through) */
+    gl.disable(gl.BLEND);
+    target(gpu.out,BS);quad();
+    const K=P.lens;
+    gl.useProgram(K.p);
+    gl.uniform1i(K.u('uS'),0);gl.uniform1i(K.u('uB'),1);gl.uniform1i(K.u('uF'),2);gl.uniform1i(K.u('uN'),3);
+    tex(3,gpu.nrm.t);tex(2,gpu.voxF.t);tex(1,gpu.vox.t);tex(0,gpu.scene.t);
+    gl.uniform1f(K.u('uBackA'),unified?0:bA);gl.uniform1f(K.u('uFrontA'),unified?1:fA);gl.uniform1f(K.u('uMaster'),mA);
+    gl.uniform1f(K.u('uBend'),lensOn?bend:0);gl.uniform1f(K.u('uDisp'),state.lensDisp);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  }
+
+  /* 6. optional gimp-style spread / final AA.
+     These post filters operate on the object composite only. The three ground
+     effects saved in gpu.fx are restored afterwards, so they remain crisp. */
+  gl.disable(gl.BLEND);
+  quad();
+  let src=gpu.out;
+  if(state.spreadOn&&(state.spreadX>0||state.spreadY>0)){
+    const Sp=P.spread,n=Math.max(1,Math.min(8,state.spreadPasses|0));
+    gl.useProgram(Sp.p);gl.uniform1i(Sp.u('uA'),0);gl.uniform2f(Sp.u('uAmt'),state.spreadX,state.spreadY);
+    for(let i=0;i<n;i++){
+      const dst=src===gpu.out?gpu.tmp:gpu.out;
+      target(dst,BS);
+      gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.uniform1f(Sp.u('uSeed'),state.spreadSeed+i*7.31);
+      tex(0,src.t);
+      gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+      src=dst;
+    }
+  }else{
+    /* edge-aware 3px AA: only smooths detected alpha edges, preserving interior pixels */
+    target(gpu.tmp,BS);
+    gl.useProgram(P.aa3.p);gl.uniform1i(P.aa3.u('uA'),0);tex(0,src.t);
+    gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    src=gpu.tmp;
+  }
+
+  /* restore the unfiltered ground effects outside the object silhouette */
+  target(null,BS);
+  gl.useProgram(P.restoreFx.p);
+  gl.uniform1i(P.restoreFx.u('uFiltered'),0);
+  gl.uniform1i(P.restoreFx.u('uFx'),1);
+  gl.uniform1i(P.restoreFx.u('uB'),2);
+  gl.uniform1i(P.restoreFx.u('uF'),3);
+  tex(0,src.t);tex(1,gpu.fx.t);tex(2,gpu.vox.t);tex(3,gpu.voxF.t);
+  gl.uniform1f(P.restoreFx.u('uBackA'),bA);
+  gl.uniform1f(P.restoreFx.u('uFrontA'),fA);
+  gl.uniform1f(P.restoreFx.u('uMaster'),mA);
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+
+  gl.activeTexture(gl.TEXTURE0);
+  present2D();
+};
+initGPU();
+
+
+buildLightUI();
+
+const voxLayer=document.createElement('canvas');voxLayer.width=voxLayer.height=CANVAS_SIZE;
+const voxCtx=voxLayer.getContext('2d');
+const grpLayer=document.createElement('canvas');grpLayer.width=grpLayer.height=CANVAS_SIZE;
+const grpCtx=grpLayer.getContext('2d');
+/* cpu-renderer spread: every pixel takes a random neighbour within +-amount/2, repeated per pass */
+const spreadCPU=(targetCtx=ctx)=>{
+  const W=CANVAS_SIZE,img=targetCtx.getImageData(0,0,W,W);
+  let a=img.data,b=new Uint8ClampedArray(a.length);
+  const ax=state.spreadX,ay=state.spreadY,n=Math.max(1,Math.min(8,state.spreadPasses|0));
+  for(let p=0;p<n;p++){
+    let sd=((state.spreadSeed*7919+p*104729)>>>0)||1;
+    const rnd=()=>{sd^=sd<<13;sd>>>=0;sd^=sd>>>17;sd^=sd<<5;sd>>>=0;return sd/4294967296;};
+    for(let y=0;y<W;y++)for(let x=0;x<W;x++){
+      let sx=Math.round(x+(rnd()-.5)*ax),sy=Math.round(y+(rnd()-.5)*ay);
+      sx=sx<0?0:sx>W-1?W-1:sx;sy=sy<0?0:sy>W-1?W-1:sy;
+      const si=(sy*W+sx)*4,di=(y*W+x)*4;
+      b[di]=a[si];b[di+1]=a[si+1];b[di+2]=a[si+2];b[di+3]=a[si+3];
+    }
+    const t=a;a=b;b=t;
+  }
+  img.data.set(a);
+  targetCtx.putImageData(img,0,0);
+};
+const renderCPU=()=>{
+  time+=16;
+  ctx.clearRect(0,0,CANVAS_SIZE,CANVAS_SIZE);
+  prepareLights();
+  const list=state.dots.map(d=>{
+    const p=project(d.x,d.y,d.z,state.rotX,state.rotY,state.rotZ);
+    return{...d,px:p.x,py:p.y,pz:p.z,depth:p.z};
+  }).sort((a,b)=>a.depth-b.depth);
+
+  const caustCol=state.texture?{r:255,g:255,b:255}:brightenHex(state.color,.7);
+  const shadowLights=state.active.filter(A=>A.shadowSamples);
+  /* glow light spill: how strongly the emissive glow lights up its surroundings (0..1).
+     Driven by both glow sliders, so raising either one makes the colour bleed brighter, wider and bolder. */
+  const go=state.glowOpacity,glowOn=go>.001;
+  const glowL=glowOn?clamp(go*state.glowStrength/2,0,1):0;
+
+  /* Continuous ground plane fallback — smooth analytic gradients, never ground dots. */
+  const groundY=cy+(project(CEN,GROUND_Y,CEN,state.rotX,state.rotY,state.rotZ).y+18)*SPACING,objX=cx,objY=groundY,objRX=Math.max(24,state.shapeRadius*SPACING),objRY=Math.max(20,state.shapeRadius*.58*SPACING);
+  ctx.save();ctx.globalCompositeOperation='source-over';
+  for(const A of shadowLights.slice(0,4)){const s=A.center;let sx=CEN,sz=CEN;if(s.dir){sx=CEN-s.dir.x*(state.shapeRadius+35);sz=CEN-s.dir.z*(state.shapeRadius+35);}else{sx=s.x;sz=s.z;}const q=project(sx,GROUND_Y,sz,state.rotX,state.rotY,state.rotZ),x=cx+q.x*SPACING,y=cy+(q.y+18)*SPACING;const rx=Math.max(18,objRX*(1+Math.min(2,A.gain*.35))),ry=Math.max(12,objRY*(1+Math.min(1.5,A.gain*.2)));
+    if(state.shadowOpacity>.001){const g=ctx.createRadialGradient(x,y,0,x,y,rx),sh=clamp(state.shadowOpacity*A.bright,0,.72),sharp=clamp(state.shadowSharpness,0,1);g.addColorStop(0,`rgba(0,0,0,${sh})`);g.addColorStop(Math.max(.2,.55-sharp*.25),`rgba(0,0,0,${sh*.55})`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.save();ctx.translate(x,y);ctx.scale(1,ry/rx);ctx.translate(-x,-y);ctx.fillStyle=g;ctx.fillRect(x-rx,y-rx,rx*2,rx*2);ctx.restore();}
+    if(state.colorBleed>.001){const c=state.texture?{r:255,g:255,b:255}:hexToRgb(state.color),brx=rx*(1.55+(1-clamp(state.bleedSharpness,0,1))*1.05),bry=ry*(1.55+(1-clamp(state.bleedSharpness,0,1))*1.05),g=ctx.createRadialGradient(x,y,0,x,y,brx),aa=clamp(state.colorBleed*BLEED_MAX*A.bright*.48,0,.48);g.addColorStop(0,`rgba(${c.r},${c.g},${c.b},${aa})`);g.addColorStop(.55,`rgba(${c.r},${c.g},${c.b},${aa*.35})`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.save();ctx.translate(x,y);ctx.scale(1,bry/brx);ctx.translate(-x,-y);ctx.fillStyle=g;ctx.fillRect(x-brx,y-brx,brx*2,brx*2);ctx.restore();}
+    if(causticOn){const c=state.texture?{r:255,g:255,b:255}:brightenHex(state.color,.7),crx=rx*(.8+(1-clamp(state.causticSharpness,0,1))*.6),cry=ry*(.8+(1-clamp(state.causticSharpness,0,1))*.6),g=ctx.createRadialGradient(x,y,0,x,y,crx),aa=clamp(state.causticOpacity*A.bright*.18,0,.16);g.addColorStop(0,`rgba(${c.r},${c.g},${c.b},${aa})`);g.addColorStop(.5,`rgba(${c.r},${c.g},${c.b},${aa*.35})`);g.addColorStop(1,'rgba(0,0,0,0)');ctx.save();ctx.translate(x,y);ctx.scale(1,cry/crx);ctx.translate(-x,-y);ctx.fillStyle=g;ctx.fillRect(x-crx,y-crx,crx*2,crx*2);ctx.restore();}
+  }
+  ctx.restore();
+
+  /* ---- glow light: a bright round pool of emitted light on the ground ----
+     Perfectly round radial falloff centred under the object, colour taken from the object itself,
+     with a white-hot core. The glow is emitted, so nothing blocks it: it fills the shadows in
+     (erases the dark) and then ADDS light on top, so shadow pixels come out brighter than bare ground. */
+  const roundPool=(c2,x,y,R,col,peak)=>{
+    const g=c2.createRadialGradient(x,y,0,x,y,R);
+    for(let i=0;i<=14;i++){
+      const t=i/14;
+      g.addColorStop(t,`rgba(${col.r},${col.g},${col.b},${clamp(peak*Math.exp(-3*t*t)*(1-t),0,1)})`);
+    }
+    c2.fillStyle=g;c2.beginPath();c2.arc(x,y,R,0,TAU);c2.fill();
+  };
+  let poolX=0,poolY=0,poolR=0,poolCol=null,coreCol=null;
+  if(glowL>.001){
+    if(state.gcFor!==state.dots){
+      /* average hue of the shell (textures included), full brightness */
+      let sr=0,sg=0,sb=0,w=0;
+      for(const d of state.dots){
+        if(!d.surf||d.bw<.02) continue;
+        sr+=d.bsr*d.bw;sg+=d.bsg*d.bw;sb+=d.bsb*d.bw;w+=d.bw;
+      }
+      if(w>0){
+        const mx=Math.max(sr,sg,sb)||1;
+        state.gc={r:Math.round(sr*255/mx),g:Math.round(sg*255/mx),b:Math.round(sb*255/mx)};
+      }else state.gc={r:255,g:255,b:255};
+      state.gcFor=state.dots;
+    }
+    poolCol=state.glowMatch?state.gc:hexToRgb(state.glowColor);
+    /* hot core = a lighter tint of the same hue, so the colour stays true instead of washing to white */
+    coreCol={r:(poolCol.r*.7+255*.3)|0,g:(poolCol.g*.7+255*.3)|0,b:(poolCol.b*.7+255*.3)|0};
+    const pc=project(CEN,GROUND_Y,CEN,state.rotX,state.rotY,state.rotZ);
+    poolX=cx+pc.x*SPACING;poolY=cy+(pc.y+18)*SPACING;
+    poolR=(state.shapeRadius*.8+state.haloSize*1.6+glowL*20)*SPACING;
+  }
+  const glowPool=glowL>.001;
+
+  if(shadowOn&&shadowAny){
+    const blurBase=SHADOW_BLUR_MIN+state.shadowBlur*(SHADOW_BLUR_MAX-SHADOW_BLUR_MIN);
+    const blurPx=SHADOW_BLUR_MIN+(blurBase-SHADOW_BLUR_MIN)*(1-clamp(state.shadowSharpness,0,1));
+    const pool=shadowPyr.compose(pyramidWeights(shadowPyr,blurPx,2.8));
+    if(glowPool){
+      /* light fills the shadow: knock the darkness out wherever the glow reaches */
+      const sx=shadowPyr.up[0].x;
+      sx.save();
+      sx.globalCompositeOperation='destination-out';
+      sx.scale(shadowPyr.scale,shadowPyr.scale);
+      roundPool(sx,poolX,poolY,poolR*1.15,{r:0,g:0,b:0},clamp(glowL*1.8,0,1));
+      sx.restore();
+    }
+    ctx.save();
+    ctx.globalAlpha=clamp(state.shadowOpacity,0,1);
+    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+    ctx.drawImage(pool,0,0,CANVAS_SIZE,CANVAS_SIZE);
+    ctx.restore();
+  }
+
+  /* color bleed: each shell voxel stamps its hue at its shadow position on a small layer,
+     which is blurred and laid over the ground. Kept apart from the dark shadow dots
+     (their per-dot alpha is ~2/255, so 8-bit rounding would wreck the hue). Blurring turns
+     the sparse projected dots into a soft pool that follows the shadow shape. */
+  const bleedOn=state.colorBleed>.001&&shadowLights.length>0;
+  if(bleedOn){
+    bleedPyr.clear();
+    const bx0=bleedPyr.ctx,bs=bleedPyr.scale,br=DOT_RADIUS*4*bs;
+    let any=false;
+    for(const d of list){
+      if(!d.surf||d.bw<.02) continue;
+      const fr=d.bsr,fg=d.bsg,fb=d.bsb;
+      for(const A of shadowLights){
+        const sh=castShadow(d.x,d.y,d.z,A.center);
+        if(!sh) continue;
+        /* the pool fades with distance from the shape so stretched far shadows don't streak */
+        const fade=Math.pow(clamp(1-Math.hypot(sh.x-CEN,sh.z-CEN)/BLEED_REACH,0,1),1.5);
+        if(fade<.01) continue;
+        const psh=project(sh.x,GROUND_Y,sh.z,state.rotX,state.rotY,state.rotZ);
+        const a=clamp(d.bw*fade*A.center.lh*A.gain*A.bright*1.35,0,1);
+        bx0.fillStyle=`rgba(${fr},${fg},${fb},${a})`;
+        bx0.beginPath();bx0.arc((cx+psh.x*SPACING)*bs,(cy+(project(CEN,GROUND_Y,CEN,state.rotX,state.rotY,state.rotZ).y+18)*SPACING)*bs,br*1.25,0,TAU);bx0.fill();
+        any=true;
+      }
+    }
+    if(any){
+      const bleedBlur=6+(BLEED_BLUR-6)*(1-clamp(state.bleedSharpness,0,1));
+      const pool=bleedPyr.compose(pyramidWeights(bleedPyr,bleedBlur,2.6));
+      ctx.save();
+      ctx.globalAlpha=clamp(state.colorBleed*BLEED_MAX,0,1);
+      ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+      ctx.drawImage(pool,0,0,CANVAS_SIZE,CANVAS_SIZE);
+      ctx.restore();
+    }
+  }
+
+  /* lay the emitted light over the ground in its true colour (normal blend keeps the hue vivid on the white page) */
+  if(glowPool){
+    ctx.save();
+    roundPool(ctx,poolX,poolY,poolR,poolCol,clamp(glowL*1.4,0,.95));
+    roundPool(ctx,poolX,poolY,poolR*.45,coreCol,clamp(glowL*1.1,0,.8));
+    ctx.restore();
+  }
+
+  const anyLight=state.active.length>0;
+  const po=state.phongOpacity,mo=state.bulletOpacity,gO=state.glassOpacity;
+  const fills=new Array(list.length);
+  for(let i=0;i<list.length;i++){
+    const d=list[i],c=d.c;
+    let r=0,gr=0,b=0;
+    if(state.principledOn){
+      const p=shadeMultiLight(d,(dd,lx,ly,lz,lc,li)=>principledSample(dd,lx,ly,lz,lc,li,state.prRough,state.prSpec,state.prCoat,state.prCoatGloss,state.prSheen,state.prSub,state.prWrap),hemiPrincipled,d.color,0,0);
+      r+=p.r;gr+=p.g;b+=p.b;
+    }else if(po>.001){
+      const p=shadeMultiLight(d,phongSample,hemiPhong,d.color,state.phongPower,state.phongInten);
+      r+=p.r*po;gr+=p.g*po;b+=p.b*po;
+    }
+    if(mo>.001){
+      const m=shadeMultiLight(d,metalSample,hemiMetal,d.color,state.roughness);
+      r+=m.r*mo;gr+=m.g*mo;b+=m.b*mo;
+    }
+    if(gO>.001){
+      const g=shadeMultiLight(d,glassSample,hemiGlass,d.color,state.glassStrength);
+      r+=(g.r+(anyLight?c.r*.55:0))*gO;
+      gr+=(g.g+(anyLight?c.g*.55:0))*gO;
+      b+=(g.b+(anyLight?c.b*.65:0))*gO;
+    }
+    if(glowOn){
+      const e=glowSample(state.glowMatch?d.color:state.glowColor,state.glowStrength);
+      r+=e.r*go;gr+=e.g*go;b+=e.b*go;
+    }
+    const df=(d.depth+MAX_DEPTH/2)/MAX_DEPTH,ff=df*state.fogAmount;
+    r=r*(1-ff)+FOG_COLOR.r*ff;gr=gr*(1-ff)+FOG_COLOR.g*ff;b=b*(1-ff)+FOG_COLOR.b*ff;
+    const post=applyBrightnessContrast(r,gr,b,state.postBrightness,state.postContrast);
+    fills[i]=`rgb(${clamp(post.r,0,255)},${clamp(post.g,0,255)},${clamp(post.b,0,255)})`;
+  }
+
+  /* front / back layers. When both are fully opaque, paint everything solid (fast path).
+     Otherwise blend each dot's own alpha between back/front opacity, feathered across a
+     depth band around the split rather than snapping between two flattened images —
+     that hard binary cut is what showed up as a visible seam/ring on the object. */
+  const fO=clamp(state.frontOpacity,0,1),bO=clamp(state.backOpacity,0,1),mO=clamp(state.voxelOpacity,0,1);
+  const paint=(c2,from,to)=>{
+    for(let i=from;i<to;i++){
+      const d=list[i];
+      c2.beginPath();c2.arc(cx+d.px*SPACING,cy+d.py*SPACING,DOT_RADIUS,0,Math.PI*2);
+      c2.fillStyle=fills[i];c2.fill();
+    }
+  };
+  /* Keep the object on its own transparent layer. This lets the final spread
+     affect only the object; shadow/bleed/caustic remain untouched underneath. */
+  grpCtx.clearRect(0,0,CANVAS_SIZE,CANVAS_SIZE);
+  if(fO>=.999&&bO>=.999&&mO>=.999){
+    paint(grpCtx,0,list.length);
+  }else{
+    const feather=Math.max(12,state.shapeRadius*.35),split=state.split;
+    for(let i=0;i<list.length;i++){
+      const d=list[i];
+      const t=clamp((d.depth-(split-feather))/(feather*2),0,1),sm=t*t*(3-2*t);
+      const a=bO+(fO-bO)*sm;
+      if(a<=.001) continue;
+      grpCtx.globalAlpha=a;
+      grpCtx.beginPath();grpCtx.arc(cx+d.px*SPACING,cy+d.py*SPACING,DOT_RADIUS,0,Math.PI*2);
+      grpCtx.fillStyle=fills[i];grpCtx.fill();
+    }
+    grpCtx.globalAlpha=1;
+  }
+  if(state.spreadOn&&(state.spreadX>0||state.spreadY>0)) spreadCPU(grpCtx);
+  if(mO>.001){ctx.save();ctx.globalAlpha=mO;ctx.drawImage(grpLayer,0,0);ctx.restore();}
+};
+
+const frame=()=>{
+  const now=performance.now();
+  if(state.animationPlaying&&state.animationFrames.length>1){
+    const interval=1000/Math.max(1,state.animationFps);
+    if(!animationLastTime)animationLastTime=now;
+    if(now-animationLastTime>=interval){
+      const steps=Math.max(1,Math.floor((now-animationLastTime)/interval));
+      animationLastTime+=steps*interval;
+      let next=state.animationIndex+steps;
+      if(state.animationLoop)next%=state.animationFrames.length;
+      else if(next>=state.animationFrames.length){next=state.animationFrames.length-1;state.animationPlaying=false;animPlay.textContent='play';}
+      if(!animationLoading)setAnimationFrame(next,true).catch(()=>{});
+    }
+  }
+  if(gpu.ok){
+    try{gpuRender();}
+    catch(err){
+      console.error('gpu renderer failed, switching to cpu:',err);
+      gpu.ok=false;gpuMsg.textContent='renderer: cpu (gpu renderer failed)';
+    }
+  }
+  if(!gpu.ok) renderCPU();
+  requestAnimationFrame(frame);
+};
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
